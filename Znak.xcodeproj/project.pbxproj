@@ -1,0 +1,497 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		100000000000000000000001 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000011 /* main.swift */; };
+		100000000000000000000002 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000012 /* AppDelegate.swift */; };
+		100000000000000000000003 /* InputController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000013 /* InputController.swift */; };
+		100000000000000000000004 /* InputEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000014 /* InputEngine.swift */; };
+		10000000000000000000000C /* CandidateWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000001A /* CandidateWindowController.swift */; };
+		10000000000000000000000F /* Preferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000001D /* Preferences.swift */; };
+		100000000000000000000010 /* PreferencesWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000001E /* PreferencesWindowController.swift */; };
+		100000000000000000000005 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 100000000000000000000021 /* AppKit.framework */; };
+		100000000000000000000006 /* InputMethodKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 100000000000000000000022 /* InputMethodKit.framework */; };
+		100000000000000000000007 /* InputEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000014 /* InputEngine.swift */; };
+		100000000000000000000008 /* InputEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000031 /* InputEngineTests.swift */; };
+		100000000000000000000009 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 100000000000000000000023 /* XCTest.framework */; };
+		10000000000000000000000A /* Znak.pdf in Resources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000016 /* Znak.pdf */; };
+		10000000000000000000000B /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000017 /* InfoPlist.strings */; };
+		10000000000000000000000D /* RussianDictionary.txt in Resources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000001B /* RussianDictionary.txt */; };
+		10000000000000000000000E /* ZnakMenuIcon.png in Resources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000001C /* ZnakMenuIcon.png */; };
+		100000000000000000000020 /* RussianPhrases.txt in Resources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000024 /* RussianPhrases.txt */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		100000000000000000000041 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 100000000000000000000101 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 100000000000000000000201;
+			remoteInfo = Znak;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		100000000000000000000011 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		100000000000000000000012 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		100000000000000000000013 /* InputController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputController.swift; sourceTree = "<group>"; };
+		100000000000000000000014 /* InputEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputEngine.swift; sourceTree = "<group>"; };
+		100000000000000000000015 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		100000000000000000000016 /* Znak.pdf */ = {isa = PBXFileReference; lastKnownFileType = image.pdf; path = Znak.pdf; sourceTree = "<group>"; };
+		100000000000000000000018 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		100000000000000000000019 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
+		10000000000000000000001A /* CandidateWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CandidateWindowController.swift; sourceTree = "<group>"; };
+		10000000000000000000001D /* Preferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Preferences.swift; sourceTree = "<group>"; };
+		10000000000000000000001E /* PreferencesWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesWindowController.swift; sourceTree = "<group>"; };
+		10000000000000000000001B /* RussianDictionary.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = RussianDictionary.txt; sourceTree = "<group>"; };
+		10000000000000000000001C /* ZnakMenuIcon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ZnakMenuIcon.png; sourceTree = "<group>"; };
+		100000000000000000000024 /* RussianPhrases.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = RussianPhrases.txt; sourceTree = "<group>"; };
+		100000000000000000000021 /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
+		100000000000000000000022 /* InputMethodKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = InputMethodKit.framework; path = System/Library/Frameworks/InputMethodKit.framework; sourceTree = SDKROOT; };
+		100000000000000000000023 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
+		100000000000000000000031 /* InputEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputEngineTests.swift; sourceTree = "<group>"; };
+		100000000000000000000051 /* Znak.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Znak.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		100000000000000000000052 /* ZnakTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ZnakTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		100000000000000000000061 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000006 /* InputMethodKit.framework in Frameworks */,
+				100000000000000000000005 /* AppKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		100000000000000000000062 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000009 /* XCTest.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		100000000000000000000071 = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000072 /* Znak */,
+				100000000000000000000073 /* ZnakTests */,
+				100000000000000000000074 /* Frameworks */,
+				100000000000000000000075 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		100000000000000000000072 /* Znak */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000011 /* main.swift */,
+				100000000000000000000012 /* AppDelegate.swift */,
+				100000000000000000000013 /* InputController.swift */,
+				10000000000000000000001A /* CandidateWindowController.swift */,
+				100000000000000000000014 /* InputEngine.swift */,
+				10000000000000000000001D /* Preferences.swift */,
+				10000000000000000000001E /* PreferencesWindowController.swift */,
+				100000000000000000000015 /* Info.plist */,
+				100000000000000000000017 /* InfoPlist.strings */,
+				10000000000000000000001B /* RussianDictionary.txt */,
+				100000000000000000000024 /* RussianPhrases.txt */,
+				100000000000000000000016 /* Znak.pdf */,
+				10000000000000000000001C /* ZnakMenuIcon.png */,
+			);
+			path = Znak;
+			sourceTree = "<group>";
+		};
+		100000000000000000000073 /* ZnakTests */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000031 /* InputEngineTests.swift */,
+			);
+			path = ZnakTests;
+			sourceTree = "<group>";
+		};
+		100000000000000000000074 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000021 /* AppKit.framework */,
+				100000000000000000000022 /* InputMethodKit.framework */,
+				100000000000000000000023 /* XCTest.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		100000000000000000000075 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000051 /* Znak.app */,
+				100000000000000000000052 /* ZnakTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		100000000000000000000201 /* Znak */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 100000000000000000000301 /* Build configuration list for PBXNativeTarget "Znak" */;
+			buildPhases = (
+				100000000000000000000211 /* Sources */,
+				100000000000000000000213 /* Resources */,
+				100000000000000000000061 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Znak;
+			productName = Znak;
+			productReference = 100000000000000000000051 /* Znak.app */;
+			productType = "com.apple.product-type.application";
+		};
+		100000000000000000000202 /* ZnakTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 100000000000000000000302 /* Build configuration list for PBXNativeTarget "ZnakTests" */;
+			buildPhases = (
+				100000000000000000000212 /* Sources */,
+				100000000000000000000062 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				100000000000000000000042 /* PBXTargetDependency */,
+			);
+			name = ZnakTests;
+			productName = ZnakTests;
+			productReference = 100000000000000000000052 /* ZnakTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		100000000000000000000101 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2641;
+				LastUpgradeCheck = 2641;
+				TargetAttributes = {
+					100000000000000000000201 = {
+						CreatedOnToolsVersion = 26.4.1;
+					};
+					100000000000000000000202 = {
+						CreatedOnToolsVersion = 26.4.1;
+						TestTargetID = 100000000000000000000201;
+					};
+				};
+			};
+			buildConfigurationList = 100000000000000000000300 /* Build configuration list for PBXProject "Znak" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				"zh-Hans",
+				Base,
+			);
+			mainGroup = 100000000000000000000071;
+			productRefGroup = 100000000000000000000075 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				100000000000000000000201 /* Znak */,
+				100000000000000000000202 /* ZnakTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		100000000000000000000213 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				10000000000000000000000B /* InfoPlist.strings in Resources */,
+				10000000000000000000000D /* RussianDictionary.txt in Resources */,
+				100000000000000000000020 /* RussianPhrases.txt in Resources */,
+				10000000000000000000000A /* Znak.pdf in Resources */,
+				10000000000000000000000E /* ZnakMenuIcon.png in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		100000000000000000000211 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000001 /* main.swift in Sources */,
+				100000000000000000000002 /* AppDelegate.swift in Sources */,
+				100000000000000000000003 /* InputController.swift in Sources */,
+				10000000000000000000000C /* CandidateWindowController.swift in Sources */,
+				100000000000000000000004 /* InputEngine.swift in Sources */,
+				10000000000000000000000F /* Preferences.swift in Sources */,
+				100000000000000000000010 /* PreferencesWindowController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		100000000000000000000212 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000007 /* InputEngine.swift in Sources */,
+				100000000000000000000008 /* InputEngineTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		100000000000000000000042 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 100000000000000000000201 /* Znak */;
+			targetProxy = 100000000000000000000041 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		100000000000000000000017 /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				100000000000000000000018 /* en */,
+				100000000000000000000019 /* zh-Hans */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		100000000000000000000401 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		100000000000000000000402 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		100000000000000000000403 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				ENABLE_DEBUG_DYLIB = NO;
+				INFOPLIST_FILE = Znak/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.znak.inputmethod.Znak;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		100000000000000000000404 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				ENABLE_DEBUG_DYLIB = NO;
+				INFOPLIST_FILE = Znak/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.znak.inputmethod.Znak;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		100000000000000000000405 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@loader_path/../Frameworks",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.znak.inputmethod.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "";
+			};
+			name = Debug;
+		};
+		100000000000000000000406 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@loader_path/../Frameworks",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.znak.inputmethod.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		100000000000000000000300 /* Build configuration list for PBXProject "Znak" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				100000000000000000000401 /* Debug */,
+				100000000000000000000402 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		100000000000000000000301 /* Build configuration list for PBXNativeTarget "Znak" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				100000000000000000000403 /* Debug */,
+				100000000000000000000404 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		100000000000000000000302 /* Build configuration list for PBXNativeTarget "ZnakTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				100000000000000000000405 /* Debug */,
+				100000000000000000000406 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 100000000000000000000101 /* Project object */;
+}
