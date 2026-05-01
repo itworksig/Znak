@@ -77,7 +77,7 @@ struct InputPreferences: Codable, Equatable {
         persistInputModeState: true,
         showShiftModeToast: true,
         preeditStyle: .underline,
-        showCandidateDetails: true,
+        showCandidateDetails: false,
         showCandidateDebugInfo: false,
         enableCandidateAnimations: true
     )

@@ -292,18 +292,20 @@ private final class CandidatePanelRootView: NSView {
     private let stripView = CandidateStripView(frame: .zero)
     private let toastView = CandidateToastView(frame: .zero)
 
-    private let fixedPanelWidth: CGFloat = 920
-    private let headerHeight: CGFloat = 48
-    private let baseStripHeight: CGFloat = 84
-    private let detailedStripHeight: CGFloat = 112
-    private let debugHeight: CGFloat = 20
+    private let minPanelWidth: CGFloat = 240
+    private let maxPanelWidth: CGFloat = 580
+    private let headerHeight: CGFloat = 28
+    private let baseStripHeight: CGFloat = 36
+    private let detailedStripHeight: CGFloat = 76
+    private let debugHeight: CGFloat = 14
 
     override var isFlipped: Bool { true }
 
     override var fittingSize: NSSize {
         let stripHeight = config.showDetails ? detailedStripHeight : baseStripHeight
         let debugExtra = config.showDebugInfo ? debugHeight : 0
-        return NSSize(width: fixedPanelWidth, height: headerHeight + stripHeight + debugExtra)
+        let w = min(maxPanelWidth, max(minPanelWidth, stripView.preferredContentWidth))
+        return NSSize(width: w, height: headerHeight + stripHeight + debugExtra)
     }
 
     override var intrinsicContentSize: NSSize { fittingSize }
@@ -335,7 +337,7 @@ private final class CandidatePanelRootView: NSView {
         let debugExtra = config.showDebugInfo ? debugHeight : 0
         headerView.frame = NSRect(x: 0, y: 0, width: bounds.width, height: headerHeight)
         stripView.frame = NSRect(x: 0, y: headerHeight, width: bounds.width, height: stripHeight + debugExtra)
-        let toastWidth = min(220, bounds.width - 32)
+        let toastWidth = min(180, bounds.width - 24)
         toastView.frame = NSRect(x: bounds.width - toastWidth - 16, y: 10, width: toastWidth, height: 28)
         layer?.cornerRadius = theme.panelCornerRadius
     }
@@ -406,11 +408,11 @@ private final class CandidateHeaderView: NSView {
     var inputModeLabel: String = "RU" { didSet { needsDisplay = true } }
     var pageLabel: String = "" { didSet { needsDisplay = true } }
 
-    private let hPad: CGFloat = 18
-    private let modeBadgeWidth: CGFloat = 42
-    private let pageBadgeWidth: CGFloat = 54
-    private let compositionFont = NSFont.systemFont(ofSize: 19, weight: .semibold)
-    private let modeFont = NSFont.monospacedSystemFont(ofSize: 12, weight: .semibold)
+    private let hPad: CGFloat = 12
+    private let modeBadgeWidth: CGFloat = 36
+    private let pageBadgeWidth: CGFloat = 44
+    private let compositionFont = NSFont.systemFont(ofSize: 14, weight: .medium)
+    private let modeFont = NSFont.monospacedSystemFont(ofSize: 10, weight: .semibold)
 
     override var isFlipped: Bool { true }
 
@@ -425,9 +427,9 @@ private final class CandidateHeaderView: NSView {
         let y = (bounds.height - size.height) / 2 - 2
         composition.draw(at: NSPoint(x: x, y: y), withAttributes: attrs)
 
-        let trailingReservedWidth = modeBadgeWidth + (pageLabel.isEmpty ? 0 : pageBadgeWidth + 8)
-        let underlineWidth = min(max(size.width, 24), bounds.width - x * 2 - trailingReservedWidth)
-        let underlineRect = NSRect(x: x, y: bounds.height - 11, width: underlineWidth, height: theme.compositionUnderlineWidth)
+        let trailingReservedWidth = modeBadgeWidth + (pageLabel.isEmpty ? 0 : pageBadgeWidth + 6) + hPad
+        let underlineWidth = min(max(size.width, 16), bounds.width - x - trailingReservedWidth)
+        let underlineRect = NSRect(x: x, y: bounds.height - 5, width: underlineWidth, height: theme.compositionUnderlineWidth)
         theme.compositionUnderlineColor.setFill()
         NSBezierPath(roundedRect: underlineRect, xRadius: 1, yRadius: 1).fill()
 
@@ -438,8 +440,9 @@ private final class CandidateHeaderView: NSView {
     }
 
     private func drawModeBadge() {
-        let badgeRect = NSRect(x: bounds.width - hPad - modeBadgeWidth, y: 11, width: modeBadgeWidth, height: 24)
-        let badgePath = NSBezierPath(roundedRect: badgeRect, xRadius: 12, yRadius: 12)
+        let badgeH: CGFloat = 18
+        let badgeRect = NSRect(x: bounds.width - hPad - modeBadgeWidth, y: (bounds.height - badgeH) / 2, width: modeBadgeWidth, height: badgeH)
+        let badgePath = NSBezierPath(roundedRect: badgeRect, xRadius: 9, yRadius: 9)
         theme.accentColor.withAlphaComponent(0.12).setFill()
         badgePath.fill()
         theme.accentColor.withAlphaComponent(0.28).setStroke()
@@ -459,8 +462,9 @@ private final class CandidateHeaderView: NSView {
 
     private func drawPageBadgeIfNeeded() {
         guard !pageLabel.isEmpty else { return }
-        let badgeRect = NSRect(x: bounds.width - hPad - modeBadgeWidth - 8 - pageBadgeWidth, y: 11, width: pageBadgeWidth, height: 24)
-        let badgePath = NSBezierPath(roundedRect: badgeRect, xRadius: 12, yRadius: 12)
+        let badgeH: CGFloat = 18
+        let badgeRect = NSRect(x: bounds.width - hPad - modeBadgeWidth - 6 - pageBadgeWidth, y: (bounds.height - badgeH) / 2, width: pageBadgeWidth, height: badgeH)
+        let badgePath = NSBezierPath(roundedRect: badgeRect, xRadius: 9, yRadius: 9)
         theme.borderColor.withAlphaComponent(0.08).setFill()
         badgePath.fill()
         theme.borderColor.withAlphaComponent(0.18).setStroke()
@@ -484,17 +488,22 @@ private final class CandidateStripView: NSView {
     var config: CandidatePanelConfig = .current() { didSet { invalidateLayout() } }
     var onCandidateSelected: ((Int) -> Void)?
 
-    private let rowHorizontalInset: CGFloat = 12
-    private let itemSpacing: CGFloat = 8
-    private let edgeFadeWidth: CGFloat = 20
-    private let itemHorizontalPadding: CGFloat = 14
-    private let baseHeight: CGFloat = 72
-    private let detailedHeight: CGFloat = 100
-    private let debugHeight: CGFloat = 18
-    private let titleFont = NSFont.systemFont(ofSize: 19, weight: .semibold)
-    private let indexFont = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium)
-    private let metaFont = NSFont.systemFont(ofSize: 11, weight: .medium)
-    private let debugFont = NSFont.systemFont(ofSize: 10, weight: .medium)
+    private let rowHorizontalInset: CGFloat = 8
+    private let itemSpacing: CGFloat = 4
+    private let edgeFadeWidth: CGFloat = 12
+    private let itemHorizontalPadding: CGFloat = 10
+    private let baseHeight: CGFloat = 28
+    private let detailedHeight: CGFloat = 64
+    private let debugHeight: CGFloat = 14
+    private let titleFont = NSFont.systemFont(ofSize: 14, weight: .medium)
+    private let indexFont = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
+    private let metaFont = NSFont.systemFont(ofSize: 10, weight: .regular)
+    private let debugFont = NSFont.systemFont(ofSize: 9, weight: .regular)
+
+    var preferredContentWidth: CGFloat {
+        guard let last = candidateLayouts.last else { return 0 }
+        return last.rect.maxX + rowHorizontalInset
+    }
 
     private var candidates: [InputEngine.Candidate] = []
     private var highlightedIndex = 0
@@ -567,16 +576,20 @@ private final class CandidateStripView: NSView {
         let debugAttrs: [NSAttributedString.Key: Any] = [.font: debugFont, .foregroundColor: debugColor]
 
         let indexText = "\(actualIndex + 1)."
-        indexText.draw(at: NSPoint(x: cardRect.minX + itemHorizontalPadding, y: cardRect.minY + 9), withAttributes: indexAttrs)
+        let indexSize = indexText.size(withAttributes: indexAttrs)
+        let titleSize = candidate.text.size(withAttributes: titleAttrs)
+        let rowH = max(indexSize.height, titleSize.height)
+        let rowY = cardRect.minY + (cardRect.height - rowH) / 2 - 1
+        indexText.draw(at: NSPoint(x: cardRect.minX + itemHorizontalPadding, y: rowY + (rowH - indexSize.height) / 2), withAttributes: indexAttrs)
 
-        let titleX = cardRect.minX + itemHorizontalPadding + indexText.size(withAttributes: indexAttrs).width + 8
-        candidate.text.draw(at: NSPoint(x: titleX, y: cardRect.minY + 6), withAttributes: titleAttrs)
+        let titleX = cardRect.minX + itemHorizontalPadding + indexSize.width + 5
+        candidate.text.draw(at: NSPoint(x: titleX, y: rowY), withAttributes: titleAttrs)
 
         if config.showDetails {
-            let metaY = cardRect.minY + 34
+            let metaY = cardRect.minY + 24
             let metaText = candidate.annotation
             metaText.draw(at: NSPoint(x: titleX, y: metaY), withAttributes: metaAttrs)
-            drawTag(candidate.partOfSpeech, at: NSPoint(x: titleX, y: cardRect.minY + 56), highlighted: isHighlighted)
+            drawTag(candidate.partOfSpeech, at: NSPoint(x: titleX, y: cardRect.minY + 40), highlighted: isHighlighted)
 
             let sourceText = candidate.source.label
             let sourceWidth = sourceText.size(withAttributes: metaAttrs).width
@@ -584,7 +597,7 @@ private final class CandidateStripView: NSView {
         }
 
         if config.showDebugInfo {
-            let debugY = cardRect.maxY - 18
+            let debugY = cardRect.maxY - 12
             let clipped = clippedDebugText(candidate.debugSummary, maxWidth: cardRect.width - itemHorizontalPadding * 2, attrs: debugAttrs)
             clipped.draw(at: NSPoint(x: cardRect.minX + itemHorizontalPadding, y: debugY), withAttributes: debugAttrs)
         }
@@ -651,8 +664,8 @@ private final class CandidateStripView: NSView {
         let sourceWidth = candidate.source.label.size(withAttributes: [.font: metaFont]).width
         let debugWidth = config.showDebugInfo ? candidate.debugSummary.size(withAttributes: [.font: debugFont]).width : 0
         let contentWidth = max(numberWidth + 8 + titleWidth, annotationWidth + sourceWidth + 30, debugWidth)
-        let baseMinWidth: CGFloat = config.showDetails ? 220 : 170
-        return min(360, max(baseMinWidth, ceil(contentWidth + itemHorizontalPadding * 2 + 30)))
+        let baseMinWidth: CGFloat = config.showDetails ? 150 : 72
+        return min(260, max(baseMinWidth, ceil(contentWidth + itemHorizontalPadding * 2 + 16)))
     }
 
     private func ensureHighlightedCandidateVisible(animated: Bool) {

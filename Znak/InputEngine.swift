@@ -292,7 +292,7 @@ struct InputEngine {
             matches.insert(mappedCandidate, at: 0)
         }
 
-        let phraseCandidates = phraseSuggestions(for: normalizedInput, previousWord: previousWord)
+        let phraseCandidates = phraseSuggestions(for: normalizedInput, mappedPrefix: mappedPrefix, previousWord: previousWord)
         if !phraseCandidates.isEmpty {
             var phraseSeen = Set(matches.map { $0.text.lowercased() })
             for phrase in phraseCandidates {
@@ -652,7 +652,7 @@ struct InputEngine {
         queryCache = nil
     }
 
-    private func phraseSuggestions(for input: String, previousWord: String?) -> [Candidate] {
+    private func phraseSuggestions(for input: String, mappedPrefix: String?, previousWord: String?) -> [Candidate] {
         guard preferences.enablePrediction else { return [] }
 
         var pool: [PhraseCandidate] = globalPhrases
@@ -667,7 +667,9 @@ struct InputEngine {
         var seen = Set<String>()
         return pool
             .filter { phrase in
-                phrase.transliteration.hasPrefix(input) || phrase.normalizedText.hasPrefix(input)
+                phrase.transliteration.hasPrefix(input)
+                    || phrase.normalizedText.hasPrefix(input)
+                    || mappedPrefix.map { phrase.normalizedText.hasPrefix($0) } == true
             }
             .sorted {
                 if $0.frequency != $1.frequency {
