@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var preferencesWindowController = PreferencesWindowController()
     private var statusItem: NSStatusItem?
     private var modeObserver: NSObjectProtocol?
+    private var settingsObserver: NSObjectProtocol?
 
     init(server: IMKServer) {
         self.server = server
@@ -22,6 +23,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             queue: .main
         ) { [weak self] _ in
             self?.refreshStatusItem()
+        }
+        settingsObserver = NotificationCenter.default.addObserver(
+            forName: .znakOpenSettingsRequested,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.openSettings()
         }
         refreshStatusItem()
     }

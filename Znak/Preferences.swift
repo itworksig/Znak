@@ -5,12 +5,12 @@ enum ZnakThemePreset: String, CaseIterable, Codable {
     case sogou
     case classic
 
-    var displayName: String {
-        switch self {
-        case .sogou: return "Sogou"
-        case .classic: return "Classic"
+        var displayName: String {
+            switch self {
+            case .sogou: return "搜狗 / Согу / Sogou"
+            case .classic: return "经典 / Классика / Classic"
+            }
         }
-    }
 }
 
 struct InputPreferences: Codable, Equatable {
@@ -21,9 +21,9 @@ struct InputPreferences: Codable, Equatable {
 
         var displayName: String {
             switch self {
-            case .underline: return "下划线"
-            case .filled: return "高亮底色"
-            case .minimal: return "极简"
+            case .underline: return "下划线 / Подчёркивание / Underline"
+            case .filled: return "高亮底色 / Подсветка / Filled"
+            case .minimal: return "极简 / Минимальный / Minimal"
             }
         }
     }
@@ -35,9 +35,9 @@ struct InputPreferences: Codable, Equatable {
 
         var displayName: String {
             switch self {
-            case .passthrough: return "直接透传"
-            case .uppercaseRussian: return "俄语大写"
-            case .toggleEnglish: return "切到英文"
+            case .passthrough: return "直接透传 / Прямой ввод / Passthrough"
+            case .uppercaseRussian: return "俄语大写 / Русский верхний регистр / Uppercase Russian"
+            case .toggleEnglish: return "切到英文 / Переключить на English / Toggle English"
             }
         }
     }
@@ -46,6 +46,7 @@ struct InputPreferences: Codable, Equatable {
     var enableBuiltinDictionary: Bool
     var enableCustomDictionary: Bool
     var enablePrediction: Bool
+    var enableLatinPrediction: Bool
     var enableLearning: Bool
     var enableAutoCorrection: Bool
     var maxCandidateCount: Int
@@ -65,6 +66,7 @@ struct InputPreferences: Codable, Equatable {
         enableBuiltinDictionary: true,
         enableCustomDictionary: true,
         enablePrediction: true,
+        enableLatinPrediction: false,
         enableLearning: true,
         enableAutoCorrection: true,
         maxCandidateCount: 24,
@@ -86,6 +88,9 @@ struct InputPreferences: Codable, Equatable {
 extension Notification.Name {
     static let znakPreferencesDidChange = Notification.Name("ZnakPreferencesDidChange")
     static let znakInputModeDidChange = Notification.Name("ZnakInputModeDidChange")
+    static let znakOpenSettingsRequested = Notification.Name("ZnakOpenSettingsRequested")
+    static let znakLearningDataDidReset = Notification.Name("ZnakLearningDataDidReset")
+    static let znakLearningDataDiagnosticDidChange = Notification.Name("ZnakLearningDataDiagnosticDidChange")
 }
 
 final class PreferencesStore: @unchecked Sendable {
@@ -94,6 +99,7 @@ final class PreferencesStore: @unchecked Sendable {
     private enum DefaultsKey {
         static let blob = "ZnakInputPreferences"
         static let inputModeBlob = "ZnakInputModeState"
+        static let learningDiagnostic = "ZnakLearningDataDiagnostic"
     }
 
     struct InputModeState: Codable, Equatable {
@@ -134,16 +140,35 @@ final class PreferencesStore: @unchecked Sendable {
         for url in urls.compactMap({ $0 }) {
             try? fileManager.removeItem(at: url)
         }
+        defaults.removeObject(forKey: DefaultsKey.learningDiagnostic)
+        NotificationCenter.default.post(name: .znakLearningDataDidReset, object: nil)
         NotificationCenter.default.post(name: .znakPreferencesDidChange, object: nil)
     }
 
     func learnedDictionaryPreview() -> String {
-        guard let url = appSupportDirectory()?.appendingPathComponent("user_dictionary.json"),
-              let data = try? Data(contentsOf: url),
-              let string = String(data: data, encoding: .utf8) else {
-            return "{\n  \"wordScores\": {},\n  \"inputWordScores\": {}\n}"
+        let body: String
+        if let url = appSupportDirectory()?.appendingPathComponent("user_dictionary.json"),
+           let data = try? Data(contentsOf: url),
+           let string = String(data: data, encoding: .utf8) {
+            body = string
+        } else {
+            body = "{\n  \"wordScores\": {},\n  \"inputWordScores\": {}\n}"
         }
-        return string
+
+        guard let diagnostic = defaults.string(forKey: DefaultsKey.learningDiagnostic),
+              !diagnostic.isEmpty else {
+            return body
+        }
+        return "\(body)\n\n/* Last learning data diagnostic:\n\(diagnostic)\n*/"
+    }
+
+    static func publishLearningDiagnostic(_ message: String?) {
+        if let message, !message.isEmpty {
+            UserDefaults.standard.set(message, forKey: DefaultsKey.learningDiagnostic)
+        } else {
+            UserDefaults.standard.removeObject(forKey: DefaultsKey.learningDiagnostic)
+        }
+        NotificationCenter.default.post(name: .znakLearningDataDiagnosticDidChange, object: nil)
     }
 
     func loadInputModeState() -> InputModeState {

@@ -1,5 +1,26 @@
 import Foundation
 
+protocol InputLearningStore {
+    var learnedWords: [String] { get }
+
+    func maxFrequencyBonus(for word: String) -> Int
+    func frequencyBonus(for word: String, input: String, previousWord: String?) -> Int
+    func learnedPhraseCandidates(after previousWord: String?) -> [InputEngine.PhraseCandidate]
+    mutating func recordSelection(_ word: String, input: String, previousWord: String?)
+}
+
+struct EmptyInputLearningStore: InputLearningStore {
+    var learnedWords: [String] { [] }
+
+    func maxFrequencyBonus(for word: String) -> Int { 0 }
+
+    func frequencyBonus(for word: String, input: String, previousWord: String?) -> Int { 0 }
+
+    func learnedPhraseCandidates(after previousWord: String?) -> [InputEngine.PhraseCandidate] { [] }
+
+    mutating func recordSelection(_ word: String, input: String, previousWord: String?) {}
+}
+
 struct InputEngine {
     struct Candidate: Equatable {
         enum Source: String, Equatable {
@@ -68,10 +89,15 @@ struct InputEngine {
 
     private struct DictionaryIndex {
         let entries: [DictionaryEntry]
-        let buckets: [String: [DictionaryEntry]]
+        let transliterationBuckets: [String: [DictionaryEntry]]
+        let textBuckets: [String: [DictionaryEntry]]
 
-        func entries(for key: String) -> [DictionaryEntry] {
-            buckets[key] ?? entries
+        func entries(forTransliterationKey key: String) -> [DictionaryEntry] {
+            transliterationBuckets[key] ?? []
+        }
+
+        func entries(forTextKey key: String) -> [DictionaryEntry] {
+            textBuckets[key] ?? []
         }
     }
 
@@ -99,7 +125,7 @@ struct InputEngine {
     private var customIndex: DictionaryIndex
     private var preferences: InputPreferences
     private var customDictionaryFingerprint: Int
-    private var userLexicon = UserLexiconStore()
+    private var userLexicon: any InputLearningStore
     private var queryCache: QueryCacheEntry?
 
     private static let fuzzyPoolLimit = 320
@@ -131,19 +157,28 @@ struct InputEngine {
     private static let commonPronouns: Set<String> = ["я", "ты", "он", "она", "мы", "вы", "они", "это", "этот", "эта", "мой", "твой", "наш", "ваш"]
     private static let commonInterjections: Set<String> = ["привет", "спасибо", "пока", "здравствуйте", "извините", "пожалуйста"]
 
-    init(bundle: Bundle = .main) {
+    init(
+        bundle: Bundle = .main,
+        preferences initialPreferences: InputPreferences = .default,
+        userLexicon: any InputLearningStore = EmptyInputLearningStore()
+    ) {
         let builtinDictionary = Self.loadDictionary(from: bundle)
         builtinIndex = Self.buildIndex(from: builtinDictionary)
         let phrases = Self.loadPhraseDictionary(from: bundle)
         let phraseIndexData = Self.buildPhraseIndex(from: phrases)
         phraseIndex = phraseIndexData.index
         globalPhrases = phraseIndexData.globals
-        preferences = PreferencesStore.shared.preferences.sanitized
+        preferences = initialPreferences.sanitized
         customDictionaryFingerprint = Self.dictionaryFingerprint(for: preferences.customDictionaryText)
         customIndex = Self.buildIndex(from: Self.parseDictionary(preferences.customDictionaryText, source: .custom))
+        self.userLexicon = userLexicon
     }
 
-    init(dictionaryText: String) {
+    init(
+        dictionaryText: String,
+        preferences initialPreferences: InputPreferences = .default,
+        userLexicon: any InputLearningStore = EmptyInputLearningStore()
+    ) {
         let parsed = Self.parseDictionary(dictionaryText)
         let builtinDictionary = parsed.isEmpty ? Self.fallbackDictionary : parsed
         builtinIndex = Self.buildIndex(from: builtinDictionary)
@@ -151,13 +186,14 @@ struct InputEngine {
         let phraseIndexData = Self.buildPhraseIndex(from: phrases)
         phraseIndex = phraseIndexData.index
         globalPhrases = phraseIndexData.globals
-        preferences = PreferencesStore.shared.preferences.sanitized
+        preferences = initialPreferences.sanitized
         customDictionaryFingerprint = Self.dictionaryFingerprint(for: preferences.customDictionaryText)
         customIndex = Self.buildIndex(from: Self.parseDictionary(preferences.customDictionaryText, source: .custom))
+        self.userLexicon = userLexicon
     }
 
-    mutating func reloadPreferences() {
-        let newPreferences = PreferencesStore.shared.preferences.sanitized
+    mutating func updatePreferences(_ newPreferences: InputPreferences) {
+        let newPreferences = newPreferences.sanitized
         let newFingerprint = Self.dictionaryFingerprint(for: newPreferences.customDictionaryText)
         let dictionaryChanged = newFingerprint != customDictionaryFingerprint
 
@@ -194,18 +230,89 @@ struct InputEngine {
     }
 
     mutating func candidates(for input: String, previousWord: String? = nil, limit: Int = 8) -> [Candidate] {
-        reloadPreferences()
         let normalizedInput = input.lowercased()
         guard !normalizedInput.isEmpty else {
             return []
         }
 
-        let mappedPrefix = mappedText(for: input)?.lowercased()
+        let mappedOutput = mappedText(for: input)
+        let mappedPrefix = mappedOutput?.lowercased()
+        let latinPredictionEnabled = preferences.enableLatinPrediction
         let fuzzyThreshold = preferences.enableAutoCorrection ? Self.fuzzyThreshold(for: normalizedInput) : 0
-        let context = queryContext(for: normalizedInput, fuzzyThreshold: fuzzyThreshold)
+        let context = queryContext(
+            for: normalizedInput,
+            mappedPrefix: mappedPrefix,
+            fuzzyThreshold: fuzzyThreshold,
+            latinPredictionEnabled: latinPredictionEnabled
+        )
+        let dictionaryMatches = dictionarySuggestions(
+            from: context.pool,
+            input: normalizedInput,
+            mappedPrefix: mappedPrefix,
+            previousWord: previousWord,
+            latinPredictionEnabled: latinPredictionEnabled
+        )
+
+        let phraseMatches = phraseSuggestions(
+            for: normalizedInput,
+            mappedPrefix: mappedPrefix,
+            previousWord: previousWord,
+            latinPredictionEnabled: latinPredictionEnabled
+        )
+
+        let fuzzyMatches = fuzzyThreshold > 0 && latinPredictionEnabled
+            ? fuzzySuggestions(
+                from: context.fuzzyPool,
+                input: normalizedInput,
+                previousWord: previousWord,
+                threshold: fuzzyThreshold
+            )
+            : []
+
+        var matches: [Candidate] = []
+        var seen = Set<String>()
+        appendUnique(dictionaryMatches, to: &matches, seen: &seen)
+        appendUnique(phraseMatches, to: &matches, seen: &seen)
+        appendUnique(fuzzyMatches, to: &matches, seen: &seen)
+
+        if matches.isEmpty, let mappedOutput, !mappedOutput.isEmpty {
+            matches.append(
+                Self.makeCandidate(
+                    text: mappedOutput,
+                    frequency: Int.max,
+                    source: .mapped,
+                    debugSummary: "来源: 映射 | 精确命中"
+                )
+            )
+        }
+
+        return Array(matches.prefix(limit))
+    }
+
+    mutating func previewText(for input: String, previousWord: String? = nil) -> String {
+        return candidates(for: input, previousWord: previousWord, limit: 1).first?.text ?? mappedText(for: input) ?? input
+    }
+
+    mutating func learnSelection(_ text: String, for input: String, previousWord: String? = nil) {
+        guard preferences.enableLearning else { return }
+        userLexicon.recordSelection(text, input: input.lowercased(), previousWord: previousWord)
+    }
+
+    mutating func replaceUserLexicon(_ userLexicon: any InputLearningStore) {
+        self.userLexicon = userLexicon
+        invalidateCaches()
+    }
+
+    private func dictionarySuggestions(
+        from entries: [DictionaryEntry],
+        input normalizedInput: String,
+        mappedPrefix: String?,
+        previousWord: String?,
+        latinPredictionEnabled: Bool
+    ) -> [Candidate] {
         var scoredMatches: [MatchScore] = []
 
-        for entry in context.pool {
+        for entry in entries {
             let candidate = entry.candidate
             let text = entry.textLower
             let transliteration = entry.transliteration
@@ -215,13 +322,13 @@ struct InputEngine {
             var bestScore: Int?
             var isMappedExact = false
 
-            if transliteration.hasPrefix(normalizedInput) {
-                let exactBonus = transliteration == normalizedInput ? 600 : 400
+            if latinPredictionEnabled, transliteration.hasPrefix(normalizedInput) {
+                let exactBonus = Self.transliterationBonus(for: normalizedInput, exact: transliteration == normalizedInput)
                 bestScore = max(bestScore ?? .min, candidate.frequency + contextBonus + exactBonus)
             }
 
             if let mappedPrefix, text.hasPrefix(mappedPrefix) {
-                let exactBonus = text == mappedPrefix ? 500 : 300
+                let exactBonus = Self.mappedPrefixBonus(for: normalizedInput, exact: text == mappedPrefix)
                 bestScore = max(bestScore ?? .min, candidate.frequency + contextBonus + exactBonus)
                 if text == mappedPrefix {
                     isMappedExact = true
@@ -248,81 +355,58 @@ struct InputEngine {
             }
         }
 
-        if fuzzyThreshold > 0 {
-            for entry in context.fuzzyPool {
-                let candidate = entry.candidate
-                let contextBonus = preferences.enablePrediction
-                    ? userLexicon.frequencyBonus(for: candidate.text, input: normalizedInput, previousWord: previousWord)
-                    : 0
+        var seen = Set<String>()
+        return scoredMatches
+            .sorted(by: Self.compareMatches)
+            .map(\.candidate)
+            .filter { seen.insert($0.text.lowercased()).inserted }
+    }
 
-                if let fuzzyScore = Self.fuzzyScore(input: normalizedInput, candidateKey: entry.transliteration, threshold: fuzzyThreshold) {
-                    scoredMatches.append(
-                        MatchScore(
-                            candidate: candidate.withSource(.fuzzy).withDebugSummary(
-                                Self.makeDebugSummary(
-                                    source: .fuzzy,
-                                    baseFrequency: candidate.frequency,
-                                    exactBonus: 0,
-                                    contextBonus: contextBonus,
-                                    fuzzyBonus: fuzzyScore
-                                )
-                            ),
-                            score: candidate.frequency + contextBonus + fuzzyScore,
-                            isMappedExact: false
-                        )
+    private func fuzzySuggestions(
+        from entries: [DictionaryEntry],
+        input normalizedInput: String,
+        previousWord: String?,
+        threshold fuzzyThreshold: Int
+    ) -> [Candidate] {
+        var scoredMatches: [MatchScore] = []
+
+        for entry in entries {
+            let candidate = entry.candidate
+            let contextBonus = preferences.enablePrediction
+                ? userLexicon.frequencyBonus(for: candidate.text, input: normalizedInput, previousWord: previousWord)
+                : 0
+
+            if let fuzzyScore = Self.fuzzyScore(input: normalizedInput, candidateKey: entry.transliteration, threshold: fuzzyThreshold) {
+                scoredMatches.append(
+                    MatchScore(
+                        candidate: candidate.withSource(.fuzzy).withDebugSummary(
+                            Self.makeDebugSummary(
+                                source: .fuzzy,
+                                baseFrequency: candidate.frequency,
+                                exactBonus: 0,
+                                contextBonus: contextBonus,
+                                fuzzyBonus: fuzzyScore
+                            )
+                        ),
+                        score: candidate.frequency + contextBonus + fuzzyScore,
+                        isMappedExact: false
                     )
-                }
+                )
             }
         }
 
         var seen = Set<String>()
-        var matches = scoredMatches
+        return scoredMatches
             .sorted(by: Self.compareMatches)
             .map(\.candidate)
             .filter { seen.insert($0.text.lowercased()).inserted }
-
-        if let mappedPrefix, !mappedPrefix.isEmpty {
-            let mappedCandidate = Self.makeCandidate(
-                text: mappedPrefix,
-                frequency: Int.max,
-                source: .mapped,
-                debugSummary: "来源: 映射 | 精确命中"
-            )
-            matches.removeAll { $0.text.lowercased() == mappedPrefix }
-            matches.insert(mappedCandidate, at: 0)
-        }
-
-        let phraseCandidates = phraseSuggestions(for: normalizedInput, mappedPrefix: mappedPrefix, previousWord: previousWord)
-        if !phraseCandidates.isEmpty {
-            var phraseSeen = Set(matches.map { $0.text.lowercased() })
-            for phrase in phraseCandidates {
-                let key = phrase.text.lowercased()
-                guard phraseSeen.insert(key).inserted else { continue }
-                matches.append(phrase)
-            }
-            matches.sort { lhs, rhs in
-                if lhs.frequency != rhs.frequency {
-                    return lhs.frequency > rhs.frequency
-                }
-                if lhs.text.count != rhs.text.count {
-                    return lhs.text.count < rhs.text.count
-                }
-                return lhs.text < rhs.text
-            }
-        }
-
-        return Array(matches.prefix(limit))
     }
 
-    mutating func previewText(for input: String, previousWord: String? = nil) -> String {
-        reloadPreferences()
-        return candidates(for: input, previousWord: previousWord, limit: 1).first?.text ?? mappedText(for: input) ?? input
-    }
-
-    mutating func learnSelection(_ text: String, for input: String, previousWord: String? = nil) {
-        reloadPreferences()
-        guard preferences.enableLearning else { return }
-        userLexicon.recordSelection(text, input: input.lowercased(), previousWord: previousWord)
+    private func appendUnique(_ candidates: [Candidate], to matches: inout [Candidate], seen: inout Set<String>) {
+        for candidate in candidates {
+            guard seen.insert(candidate.text.lowercased()).inserted else { continue }
+            matches.append(candidate)
+        }
     }
 
     private static func compareMatches(_ lhs: MatchScore, _ rhs: MatchScore) -> Bool {
@@ -336,6 +420,32 @@ struct InputEngine {
             return lhs.candidate.text.count < rhs.candidate.text.count
         }
         return lhs.candidate.text < rhs.candidate.text
+    }
+
+    private static func transliterationBonus(for input: String, exact: Bool) -> Int {
+        switch input.count {
+        case 0:
+            return 0
+        case 1:
+            return exact ? 100 : 50
+        case 2:
+            return exact ? 280 : 180
+        default:
+            return exact ? 600 : 400
+        }
+    }
+
+    private static func mappedPrefixBonus(for input: String, exact: Bool) -> Int {
+        switch input.count {
+        case 0:
+            return 0
+        case 1:
+            return exact ? 1200 : 900
+        case 2:
+            return exact ? 1000 : 720
+        default:
+            return exact ? 700 : 500
+        }
     }
 
     private static func makeCandidate(text: String, frequency: Int, source: Candidate.Source, debugSummary: String) -> Candidate {
@@ -522,36 +632,57 @@ struct InputEngine {
             )
         }
 
-        var buckets: [String: [DictionaryEntry]] = [:]
+        var transliterationBuckets: [String: [DictionaryEntry]] = [:]
+        var textBuckets: [String: [DictionaryEntry]] = [:]
         for entry in entries {
-            guard !entry.transliteration.isEmpty else { continue }
+            if !entry.transliteration.isEmpty {
+                let key1 = String(entry.transliteration.prefix(1))
+                transliterationBuckets[key1, default: []].append(entry)
 
-            let key1 = String(entry.transliteration.prefix(1))
-            buckets[key1, default: []].append(entry)
+                let key2 = String(entry.transliteration.prefix(2))
+                if key2.count == 2 {
+                    transliterationBuckets[key2, default: []].append(entry)
+                }
+            }
 
-            let key2 = String(entry.transliteration.prefix(2))
-            if key2.count == 2 {
-                buckets[key2, default: []].append(entry)
+            guard !entry.textLower.isEmpty else { continue }
+            let textKey1 = String(entry.textLower.prefix(1))
+            textBuckets[textKey1, default: []].append(entry)
+
+            let textKey2 = String(entry.textLower.prefix(2))
+            if textKey2.count == 2 {
+                textBuckets[textKey2, default: []].append(entry)
             }
         }
 
-        return DictionaryIndex(entries: entries, buckets: buckets)
+        return DictionaryIndex(entries: entries, transliterationBuckets: transliterationBuckets, textBuckets: textBuckets)
     }
 
-    private func exactMatchEntries(for input: String) -> [DictionaryEntry] {
+    private func exactMatchEntries(for input: String, mappedPrefix: String?, latinPredictionEnabled: Bool) -> [DictionaryEntry] {
         var pool: [DictionaryEntry] = []
-        let bucketKey = Self.prefixBucketKey(for: input)
+        let transliterationKey = Self.prefixBucketKey(for: input)
+        let mappedKey = Self.prefixBucketKey(for: mappedPrefix ?? "")
 
         if preferences.enablePrediction {
             pool.append(contentsOf: learnedEntries())
         }
 
         if preferences.enableCustomDictionary {
-            pool.append(contentsOf: customIndex.entries(for: bucketKey))
+            if !mappedKey.isEmpty {
+                pool.append(contentsOf: customIndex.entries(forTextKey: mappedKey))
+            }
+            if latinPredictionEnabled, !transliterationKey.isEmpty {
+                pool.append(contentsOf: customIndex.entries(forTransliterationKey: transliterationKey))
+            }
         }
 
         if preferences.enableBuiltinDictionary {
-            pool.append(contentsOf: builtinIndex.entries(for: bucketKey))
+            if !mappedKey.isEmpty {
+                pool.append(contentsOf: builtinIndex.entries(forTextKey: mappedKey))
+            }
+            if latinPredictionEnabled, !transliterationKey.isEmpty {
+                pool.append(contentsOf: builtinIndex.entries(forTransliterationKey: transliterationKey))
+            }
         }
 
         if pool.isEmpty {
@@ -566,11 +697,11 @@ struct InputEngine {
         var pool: [DictionaryEntry] = []
 
         if preferences.enableCustomDictionary {
-            pool.append(contentsOf: customIndex.entries(for: broadKey))
+            pool.append(contentsOf: customIndex.entries(forTransliterationKey: broadKey))
         }
 
         if preferences.enableBuiltinDictionary {
-            pool.append(contentsOf: builtinIndex.entries(for: broadKey))
+            pool.append(contentsOf: builtinIndex.entries(forTransliterationKey: broadKey))
         }
 
         return Array(deduplicatedEntries(pool).prefix(Self.fuzzyPoolLimit))
@@ -607,7 +738,7 @@ struct InputEngine {
         return entries.filter { seen.insert($0.textLower).inserted }
     }
 
-    private mutating func queryContext(for input: String, fuzzyThreshold: Int) -> QueryContext {
+    private mutating func queryContext(for input: String, mappedPrefix: String?, fuzzyThreshold: Int, latinPredictionEnabled: Bool) -> QueryContext {
         if let queryCache,
            queryCache.input == input,
            queryCache.preferences == preferences,
@@ -619,12 +750,14 @@ struct InputEngine {
            input.hasPrefix(queryCache.input),
            queryCache.preferences == preferences,
            queryCache.customDictionaryFingerprint == customDictionaryFingerprint {
+            let hasMappedPrefix = mappedPrefix?.isEmpty == false
             let narrowedPool = queryCache.context.pool.filter { entry in
-                entry.transliteration.hasPrefix(input) || entry.textLower.hasPrefix(input)
+                (latinPredictionEnabled && entry.transliteration.hasPrefix(input))
+                    || (hasMappedPrefix && entry.textLower.hasPrefix(mappedPrefix ?? ""))
             }
             let narrowedContext = QueryContext(
                 pool: narrowedPool,
-                fuzzyPool: fuzzyThreshold > 0 ? queryCache.context.fuzzyPool : []
+                fuzzyPool: fuzzyThreshold > 0 && latinPredictionEnabled ? queryCache.context.fuzzyPool : []
             )
             self.queryCache = QueryCacheEntry(
                 input: input,
@@ -636,8 +769,8 @@ struct InputEngine {
         }
 
         let context = QueryContext(
-            pool: exactMatchEntries(for: input),
-            fuzzyPool: fuzzyThreshold > 0 ? fuzzyMatchEntries(for: input) : []
+            pool: exactMatchEntries(for: input, mappedPrefix: mappedPrefix, latinPredictionEnabled: latinPredictionEnabled),
+            fuzzyPool: fuzzyThreshold > 0 && latinPredictionEnabled ? fuzzyMatchEntries(for: input) : []
         )
         queryCache = QueryCacheEntry(
             input: input,
@@ -652,7 +785,7 @@ struct InputEngine {
         queryCache = nil
     }
 
-    private func phraseSuggestions(for input: String, mappedPrefix: String?, previousWord: String?) -> [Candidate] {
+    private func phraseSuggestions(for input: String, mappedPrefix: String?, previousWord: String?, latinPredictionEnabled: Bool) -> [Candidate] {
         guard preferences.enablePrediction else { return [] }
 
         var pool: [PhraseCandidate] = globalPhrases
@@ -667,9 +800,8 @@ struct InputEngine {
         var seen = Set<String>()
         return pool
             .filter { phrase in
-                phrase.transliteration.hasPrefix(input)
-                    || phrase.normalizedText.hasPrefix(input)
-                    || mappedPrefix.map { phrase.normalizedText.hasPrefix($0) } == true
+                (latinPredictionEnabled && phrase.transliteration.hasPrefix(input))
+                    || ((mappedPrefix?.isEmpty == false) && phrase.normalizedText.hasPrefix(mappedPrefix ?? ""))
             }
             .sorted {
                 if $0.frequency != $1.frequency {
@@ -775,7 +907,7 @@ struct InputEngine {
     }
 }
 
-private struct UserLexiconStore {
+struct UserLexiconStore: InputLearningStore {
     private struct PersistedLexicon: Codable {
         var version: Int
         var wordScores: [String: Int]
@@ -783,6 +915,32 @@ private struct UserLexiconStore {
         var bigramScores: [String: [String: Int]]
         var phraseScores: [String: [String: Int]]
         var recentSelections: [RecentSelection]
+
+        init(
+            version: Int,
+            wordScores: [String: Int],
+            inputWordScores: [String: [String: Int]],
+            bigramScores: [String: [String: Int]],
+            phraseScores: [String: [String: Int]],
+            recentSelections: [RecentSelection]
+        ) {
+            self.version = version
+            self.wordScores = wordScores
+            self.inputWordScores = inputWordScores
+            self.bigramScores = bigramScores
+            self.phraseScores = phraseScores
+            self.recentSelections = recentSelections
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
+            wordScores = try container.decodeIfPresent([String: Int].self, forKey: .wordScores) ?? [:]
+            inputWordScores = try container.decodeIfPresent([String: [String: Int]].self, forKey: .inputWordScores) ?? [:]
+            bigramScores = try container.decodeIfPresent([String: [String: Int]].self, forKey: .bigramScores) ?? [:]
+            phraseScores = try container.decodeIfPresent([String: [String: Int]].self, forKey: .phraseScores) ?? [:]
+            recentSelections = try container.decodeIfPresent([RecentSelection].self, forKey: .recentSelections) ?? []
+        }
     }
 
     private struct RecentSelection: Codable, Equatable {
@@ -814,8 +972,8 @@ private struct UserLexiconStore {
     private var pendingFlushWorkItem: DispatchWorkItem?
     private let flushQueue = DispatchQueue(label: "com.znak.userlexicon.flush", qos: .utility)
 
-    init(fileManager: FileManager = .default) {
-        storageURL = Self.makeStorageURL(fileManager: fileManager)
+    init(fileManager: FileManager = .default, storageDirectory: URL? = nil) {
+        storageURL = Self.makeStorageURL(fileManager: fileManager, storageDirectory: storageDirectory)
         backupURL = storageURL?.deletingLastPathComponent().appendingPathComponent("user_dictionary.backup.json")
 
         let persisted = Self.load(from: storageURL, backupURL: backupURL)
@@ -898,8 +1056,13 @@ private struct UserLexiconStore {
         )
 
         let workItem = DispatchWorkItem { [storageURL, backupURL] in
-            guard let storageURL,
-                  let data = try? JSONEncoder().encode(snapshot) else {
+            guard let storageURL else {
+                Self.publishDiagnostic("Unable to persist user lexicon: storage location is unavailable.")
+                return
+            }
+
+            guard let data = try? JSONEncoder().encode(snapshot) else {
+                Self.publishDiagnostic("Unable to persist user lexicon: JSON encoding failed.")
                 return
             }
 
@@ -910,8 +1073,9 @@ private struct UserLexiconStore {
                     try? FileManager.default.copyItem(at: storageURL, to: backupURL)
                 }
                 try data.write(to: storageURL, options: .atomic)
+                Self.publishDiagnostic(nil)
             } catch {
-                NSLog("[Znak] Failed to persist user lexicon: \(error.localizedDescription)")
+                Self.publishDiagnostic("Failed to persist user lexicon at \(storageURL.path): \(error.localizedDescription)")
             }
         }
 
@@ -928,7 +1092,7 @@ private struct UserLexiconStore {
             if let url, let data = try? JSONEncoder().encode(backup) {
                 try? data.write(to: url, options: .atomic)
             }
-            NSLog("[Znak] Restored user lexicon from backup")
+            publishDiagnostic("Restored user lexicon from backup.")
             return backup
         }
 
@@ -949,7 +1113,7 @@ private struct UserLexiconStore {
            FileManager.default.fileExists(atPath: url.path) {
             let damagedURL = url.deletingLastPathComponent().appendingPathComponent("user_dictionary.damaged-\(Int(Date().timeIntervalSince1970)).json")
             try? FileManager.default.moveItem(at: url, to: damagedURL)
-            NSLog("[Znak] Moved damaged user lexicon to \(damagedURL.path)")
+            publishDiagnostic("Moved damaged user lexicon to \(damagedURL.path).")
         }
 
         return PersistedLexicon(version: schemaVersion, wordScores: [:], inputWordScores: [:], bigramScores: [:], phraseScores: [:], recentSelections: [])
@@ -957,23 +1121,38 @@ private struct UserLexiconStore {
 
     private static func loadPersistedLexicon(from url: URL?) -> PersistedLexicon? {
         guard let url,
-              let data = try? Data(contentsOf: url),
-              let decoded = try? JSONDecoder().decode(PersistedLexicon.self, from: data) else {
+              let data = try? Data(contentsOf: url) else {
+            return nil
+        }
+
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            let schemaKeys: Set<String> = ["version", "wordScores", "inputWordScores", "bigramScores", "phraseScores", "recentSelections"]
+            if schemaKeys.isDisjoint(with: Set(json.keys)) {
+                return nil
+            }
+        }
+
+        guard let decoded = try? JSONDecoder().decode(PersistedLexicon.self, from: data) else {
             return nil
         }
         return decoded
     }
 
-    private static func makeStorageURL(fileManager: FileManager) -> URL? {
-        guard let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+    private static func makeStorageURL(fileManager: FileManager, storageDirectory: URL?) -> URL? {
+        let directory: URL
+        if let storageDirectory {
+            directory = storageDirectory
+        } else if let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            directory = appSupport.appendingPathComponent("Znak", isDirectory: true)
+        } else {
+            publishDiagnostic("Unable to create user lexicon directory: Application Support is unavailable.")
             return nil
         }
 
-        let directory = appSupport.appendingPathComponent("Znak", isDirectory: true)
         do {
             try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         } catch {
-            NSLog("[Znak] Failed to create user lexicon directory: \(error.localizedDescription)")
+            publishDiagnostic("Failed to create user lexicon directory at \(directory.path): \(error.localizedDescription)")
             return nil
         }
 
@@ -1024,7 +1203,7 @@ private struct UserLexiconStore {
     }
 
     private static func normalizedInputKey(_ input: String) -> String {
-        input.lowercased()
+        input.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func normalizedWordKey(_ word: String) -> String? {
@@ -1065,7 +1244,7 @@ private struct UserLexiconStore {
 
     private static func isLearnable(_ word: String) -> Bool {
         let lowered = word.lowercased()
-        guard lowered.count >= 2 else { return false }
+        guard lowered.count >= 2, !lowered.contains(" ") else { return false }
         return lowered.unicodeScalars.allSatisfy { scalar in
             CharacterSet(charactersIn: "\u{0400}"..."\u{04FF}").contains(scalar)
         }
@@ -1078,8 +1257,18 @@ private struct UserLexiconStore {
     }
 
     private static func isLearnableInput(_ input: String) -> Bool {
-        let lowered = input.lowercased()
+        let lowered = normalizedInputKey(input)
         guard (2...20).contains(lowered.count) else { return false }
-        return lowered.unicodeScalars.allSatisfy { CharacterSet.letters.contains($0) || CharacterSet.decimalDigits.contains($0) }
+        let allowedCharacters = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz[];',./`")
+        return lowered.unicodeScalars.allSatisfy { allowedCharacters.contains($0) }
+    }
+
+    private static func publishDiagnostic(_ message: String?) {
+        if let message {
+            NSLog("[Znak] \(message)")
+        }
+        DispatchQueue.main.async {
+            PreferencesStore.publishLearningDiagnostic(message)
+        }
     }
 }

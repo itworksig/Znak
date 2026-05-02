@@ -1,44 +1,73 @@
-import AppKit
+@preconcurrency import AppKit
 
 final class PreferencesWindowController: NSWindowController {
+    private static let defaultWindowSize = NSSize(width: 980, height: 820)
+    private static let minimumWindowSize = NSSize(width: 920, height: 760)
+    private static let maxWindowSize = NSSize(width: 1600, height: 1400)
+
     private let store: PreferencesStore
 
     private let themePopup = NSPopUpButton()
-    private let builtinDictionaryCheckbox = NSButton(checkboxWithTitle: "启用内置词库", target: nil, action: nil)
-    private let customDictionaryCheckbox = NSButton(checkboxWithTitle: "启用自定义词库", target: nil, action: nil)
-    private let predictionCheckbox = NSButton(checkboxWithTitle: "启用联想/学习排序", target: nil, action: nil)
-    private let learningCheckbox = NSButton(checkboxWithTitle: "记住用户选词习惯", target: nil, action: nil)
-    private let correctionCheckbox = NSButton(checkboxWithTitle: "启用纠错/模糊匹配", target: nil, action: nil)
-    private let perAppModeCheckbox = NSButton(checkboxWithTitle: "按应用记住 RU/EN 模式", target: nil, action: nil)
-    private let temporaryEnglishCheckbox = NSButton(checkboxWithTitle: "按住 Shift 临时英文输入", target: nil, action: nil)
-    private let persistModeCheckbox = NSButton(checkboxWithTitle: "记住输入模式状态", target: nil, action: nil)
-    private let shiftToastCheckbox = NSButton(checkboxWithTitle: "切换模式时显示轻提示", target: nil, action: nil)
+    private let builtinDictionaryCheckbox = NSButton(checkboxWithTitle: "", target: nil, action: nil)
+    private let customDictionaryCheckbox = NSButton(checkboxWithTitle: "", target: nil, action: nil)
+    private let predictionCheckbox = NSButton(checkboxWithTitle: "", target: nil, action: nil)
+    private let latinPredictionCheckbox = NSButton(checkboxWithTitle: "", target: nil, action: nil)
+    private let learningCheckbox = NSButton(checkboxWithTitle: "", target: nil, action: nil)
+    private let correctionCheckbox = NSButton(checkboxWithTitle: "", target: nil, action: nil)
+    private let perAppModeCheckbox = NSButton(checkboxWithTitle: "", target: nil, action: nil)
+    private let temporaryEnglishCheckbox = NSButton(checkboxWithTitle: "", target: nil, action: nil)
+    private let persistModeCheckbox = NSButton(checkboxWithTitle: "", target: nil, action: nil)
+    private let shiftToastCheckbox = NSButton(checkboxWithTitle: "", target: nil, action: nil)
     private let capsLockPopup = NSPopUpButton()
     private let preeditStylePopup = NSPopUpButton()
-    private let candidateDetailsCheckbox = NSButton(checkboxWithTitle: "显示候选注释/词性/来源", target: nil, action: nil)
-    private let candidateDebugCheckbox = NSButton(checkboxWithTitle: "显示候选来源与排序解释", target: nil, action: nil)
-    private let candidateAnimationsCheckbox = NSButton(checkboxWithTitle: "启用候选窗动画与轻提示", target: nil, action: nil)
+    private let candidateDetailsCheckbox = NSButton(checkboxWithTitle: "", target: nil, action: nil)
+    private let candidateDebugCheckbox = NSButton(checkboxWithTitle: "", target: nil, action: nil)
+    private let candidateAnimationsCheckbox = NSButton(checkboxWithTitle: "", target: nil, action: nil)
     private let candidateCountField = NSTextField()
     private let customDictionaryView = NSTextView()
     private let learnedPreviewView = NSTextView()
+    private let subtitleLabel = NSTextField(labelWithString: "候选窗主题、词库与输入行为都可以在这里统一调整。\nТема окна кандидатов, словари и поведение ввода.\nTune candidate theme, dictionaries, and input behavior here.")
+    private var learningDiagnosticObserver: NSObjectProtocol?
 
     init(store: PreferencesStore = .shared) {
         self.store = store
 
-        let contentRect = NSRect(x: 0, y: 0, width: 760, height: 680)
+        let contentRect = NSRect(origin: .zero, size: Self.defaultWindowSize)
         let window = NSWindow(
             contentRect: contentRect,
-            styleMask: [.titled, .closable, .miniaturizable],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
-        window.title = "Znak Settings"
+        window.title = "Znak"
         window.center()
         window.isReleasedWhenClosed = false
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.toolbarStyle = .unifiedCompact
+        window.setContentSize(Self.defaultWindowSize)
+        window.contentMinSize = Self.minimumWindowSize
+        window.contentMaxSize = Self.maxWindowSize
+        window.minSize = Self.minimumWindowSize
+        window.maxSize = Self.maxWindowSize
+        window.setFrameAutosaveName("")
 
         super.init(window: window)
         buildUI()
         loadPreferences()
+        learningDiagnosticObserver = NotificationCenter.default.addObserver(
+            forName: .znakLearningDataDiagnosticDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.learnedPreviewView.string = self?.store.learnedDictionaryPreview() ?? ""
+        }
+    }
+
+    deinit {
+        if let learningDiagnosticObserver {
+            NotificationCenter.default.removeObserver(learningDiagnosticObserver)
+        }
     }
 
     @available(*, unavailable)
@@ -48,154 +77,448 @@ final class PreferencesWindowController: NSWindowController {
 
     func showWindowAndActivate() {
         showWindow(nil)
+        forceWindowFrame()
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func forceWindowFrame() {
+        guard let window else { return }
+        var frame = window.frameRect(forContentRect: NSRect(origin: .zero, size: Self.defaultWindowSize))
+        window.minSize = Self.minimumWindowSize
+        window.maxSize = Self.maxWindowSize
+        if let screenFrame = window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame {
+            frame.origin.x = screenFrame.midX - frame.width / 2
+            frame.origin.y = screenFrame.midY - frame.height / 2
+        }
+        window.setContentSize(Self.defaultWindowSize)
+        window.setFrame(frame, display: true, animate: false)
+        window.layoutIfNeeded()
     }
 
     private func buildUI() {
         guard let contentView = window?.contentView else { return }
 
+        let background = NSView()
+        background.wantsLayer = true
+        background.layer?.backgroundColor = NSColor.white.cgColor
+        background.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(background)
+
+        let scrollView = NSScrollView()
+        scrollView.drawsBackground = false
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.borderType = .noBorder
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        background.addSubview(scrollView)
+
+        let documentView = NSView()
+        documentView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.documentView = documentView
+
         let root = NSStackView()
         root.orientation = .vertical
-        root.spacing = 18
+        root.alignment = .centerX
+        root.distribution = .fill
+        root.spacing = 24
         root.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(root)
+        documentView.addSubview(root)
 
         NSLayoutConstraint.activate([
-            root.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 22),
-            root.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -22),
-            root.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 18),
-            root.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -18)
+            background.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            background.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            background.topAnchor.constraint(equalTo: contentView.topAnchor),
+            background.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+
+            scrollView.leadingAnchor.constraint(equalTo: background.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: background.trailingAnchor),
+            scrollView.topAnchor.constraint(equalTo: background.topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: background.bottomAnchor),
+
+            documentView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
+            documentView.widthAnchor.constraint(greaterThanOrEqualToConstant: Self.minimumWindowSize.width),
+            root.leadingAnchor.constraint(equalTo: documentView.leadingAnchor, constant: 28),
+            root.trailingAnchor.constraint(equalTo: documentView.trailingAnchor, constant: -28),
+            root.topAnchor.constraint(equalTo: documentView.topAnchor, constant: 24),
+            root.bottomAnchor.constraint(equalTo: documentView.bottomAnchor, constant: -28)
         ])
 
+        configureControls()
+
+        let hero = makeHeroSection()
+        let topGrid = makeTopSection()
+        let dictionaries = makeLargeDictionarySection()
+        let footer = makeFooterBar()
+
+        [hero, topGrid, dictionaries, footer].forEach {
+            $0.translatesAutoresizingMaskIntoConstraints = false
+            root.addArrangedSubview($0)
+        }
+
+        NSLayoutConstraint.activate([
+            hero.widthAnchor.constraint(equalTo: root.widthAnchor),
+            topGrid.widthAnchor.constraint(equalTo: root.widthAnchor),
+            dictionaries.widthAnchor.constraint(equalTo: root.widthAnchor),
+            footer.widthAnchor.constraint(equalTo: root.widthAnchor)
+        ])
+    }
+
+    private func makeTopSection() -> NSView {
+        let firstRow = makeEqualWidthRow(makeAppearanceCard(), makeInputModeCard())
+        let secondRow = makeEqualWidthRow(makeLexiconCard(), makeLearningCard())
+
+        let stack = NSStackView(views: [firstRow, secondRow])
+        stack.orientation = .vertical
+        stack.alignment = .centerX
+        stack.spacing = 18
+        return stack
+    }
+
+    private func configureControls() {
         themePopup.addItems(withTitles: ZnakThemePreset.allCases.map(\.displayName))
         capsLockPopup.addItems(withTitles: InputPreferences.CapsLockBehavior.allCases.map(\.displayName))
         preeditStylePopup.addItems(withTitles: InputPreferences.PreeditStyle.allCases.map(\.displayName))
-        candidateCountField.alignment = .right
-        candidateCountField.controlSize = .regular
 
-        let appearanceSection = makeSection(title: "外观", views: [
-            makeLabeledRow(label: "候选窗主题", control: themePopup),
-            makeLabeledRow(label: "预编辑样式", control: preeditStylePopup),
-            candidateDetailsCheckbox,
-            candidateDebugCheckbox,
-            candidateAnimationsCheckbox,
-            makeLabeledRow(label: "每次最多候选数", control: candidateCountField)
-        ])
-
-        let intelligenceSection = makeSection(title: "智能输入", views: [
-            builtinDictionaryCheckbox,
-            customDictionaryCheckbox,
-            predictionCheckbox,
-            learningCheckbox,
-            correctionCheckbox,
-            makeLabeledRow(label: "Caps Lock 行为", control: capsLockPopup),
-            perAppModeCheckbox,
-            temporaryEnglishCheckbox,
-            persistModeCheckbox,
-            shiftToastCheckbox
-        ])
-
-        let customDictionarySection = makeDictionarySection(
-            title: "自定义词库",
-            textView: customDictionaryView,
-            buttonTitle: "保存自定义词库",
-            buttonAction: #selector(savePreferences)
-        )
-
-        let learnedSection = makeDictionarySection(
-            title: "用户学习词典预览",
-            textView: learnedPreviewView,
-            buttonTitle: "清空学习记录",
-            buttonAction: #selector(resetLearningData)
-        )
-        learnedPreviewView.isEditable = false
-
-        let footerButtons = NSStackView()
-        footerButtons.orientation = .horizontal
-        footerButtons.alignment = .centerY
-        footerButtons.spacing = 12
-
-        let saveButton = NSButton(title: "应用设置", target: self, action: #selector(savePreferences))
-        saveButton.bezelStyle = .rounded
-        let reloadButton = NSButton(title: "重新读取", target: self, action: #selector(reloadPreferences))
-        reloadButton.bezelStyle = .rounded
-        footerButtons.addArrangedSubview(saveButton)
-        footerButtons.addArrangedSubview(reloadButton)
-        footerButtons.addArrangedSubview(NSView())
-
-        [appearanceSection, intelligenceSection, customDictionarySection, learnedSection, footerButtons].forEach {
-            root.addArrangedSubview($0)
+        [themePopup, capsLockPopup, preeditStylePopup].forEach {
+            $0.controlSize = .large
+            $0.font = .systemFont(ofSize: 13, weight: .medium)
         }
+
+        candidateCountField.alignment = .center
+        candidateCountField.controlSize = .large
+        candidateCountField.font = .monospacedDigitSystemFont(ofSize: 14, weight: .semibold)
+        candidateCountField.wantsLayer = true
+        candidateCountField.layer?.cornerRadius = 10
+
+        [builtinDictionaryCheckbox, customDictionaryCheckbox, predictionCheckbox, latinPredictionCheckbox, learningCheckbox, correctionCheckbox,
+         perAppModeCheckbox, temporaryEnglishCheckbox, persistModeCheckbox, shiftToastCheckbox,
+         candidateDetailsCheckbox, candidateDebugCheckbox, candidateAnimationsCheckbox].forEach {
+            $0.font = .systemFont(ofSize: 14, weight: .medium)
+            $0.setButtonType(.switch)
+            $0.controlSize = .large
+            $0.title = ""
+        }
+
+        [customDictionaryView, learnedPreviewView].forEach {
+            $0.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+            $0.isRichText = false
+            $0.usesFindBar = true
+            $0.minSize = NSSize(width: 0, height: 220)
+            $0.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+            $0.isVerticallyResizable = true
+            $0.isHorizontallyResizable = false
+            $0.textContainerInset = NSSize(width: 10, height: 12)
+            $0.backgroundColor = .white
+        }
+        learnedPreviewView.isEditable = false
     }
 
-    private func makeSection(title: String, views: [NSView]) -> NSView {
-        let titleLabel = NSTextField(labelWithString: title)
-        titleLabel.font = .systemFont(ofSize: 15, weight: .semibold)
+    private func makeHeroSection() -> NSView {
+        let title = NSTextField(labelWithString: "Znak")
+        title.font = .systemFont(ofSize: 30, weight: .bold)
+        title.textColor = .labelColor
 
-        let stack = NSStackView(views: [titleLabel] + views)
+        subtitleLabel.font = .systemFont(ofSize: 14, weight: .regular)
+        subtitleLabel.textColor = .secondaryLabelColor
+        subtitleLabel.maximumNumberOfLines = 3
+
+        let badges = NSStackView(views: [
+            makeBadge(title: "RU/EN", tint: NSColor.systemBlue),
+            makeBadge(title: "词库 / Словарь / Lexicon", tint: NSColor.systemOrange),
+            makeBadge(title: "候选窗 / Кандидаты / Candidates", tint: NSColor.systemTeal)
+        ])
+        badges.orientation = .horizontal
+        badges.spacing = 10
+
+        let stack = NSStackView(views: [title, subtitleLabel, badges])
         stack.orientation = .vertical
+        stack.alignment = .leading
         stack.spacing = 10
-        return wrapInCard(stack)
+        return wrapInCard(content: stack, inset: 22, accent: true)
     }
 
-    private func makeDictionarySection(title: String, textView: NSTextView, buttonTitle: String, buttonAction: Selector) -> NSView {
-        let titleLabel = NSTextField(labelWithString: title)
-        titleLabel.font = .systemFont(ofSize: 15, weight: .semibold)
+    private func makeAppearanceCard() -> NSView {
+        let stack = cardStack(
+            title: "候选窗外观",
+            subtitle: "Внешний вид окна кандидатов / Candidate appearance\n控制主题、预编辑和信息密度。"
+        )
+        stack.addArrangedSubview(makeSettingRow("候选窗主题", "Тема окна / Window theme", themePopup))
+        stack.addArrangedSubview(makeSettingRow("预编辑样式", "Стиль предредактирования / Preedit style", preeditStylePopup))
+        stack.addArrangedSubview(makeSettingRow("每页最多候选数", "Кандидатов на страницу / Candidates per page", candidateCountField))
+        stack.addArrangedSubview(makeCheckboxRow(candidateDetailsCheckbox, title: "显示候选注释 / 词性 / 来源", subtitle: "Примечания, часть речи, источник / Note, POS, source"))
+        stack.addArrangedSubview(makeCheckboxRow(candidateDebugCheckbox, title: "显示候选来源与排序解释", subtitle: "Источник и ранжирование / Source and ranking explanation"))
+        stack.addArrangedSubview(makeCheckboxRow(candidateAnimationsCheckbox, title: "启用候选窗动画与轻提示", subtitle: "Анимация и подсказки / Candidate animations and toast"))
+        return wrapInCard(content: stack, inset: 20)
+    }
 
-        let scrollView = NSScrollView()
-        scrollView.borderType = .bezelBorder
-        scrollView.hasVerticalScroller = true
-        scrollView.documentView = textView
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        textView.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
-        textView.isRichText = false
-        textView.usesFindBar = true
-        textView.minSize = NSSize(width: 0, height: 180)
-        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-        textView.isVerticallyResizable = true
-        textView.isHorizontallyResizable = false
-        textView.textContainerInset = NSSize(width: 8, height: 8)
+    private func makeInputModeCard() -> NSView {
+        let stack = cardStack(
+            title: "输入模式",
+            subtitle: "Режим ввода / Input mode\n决定中英切换、Caps Lock 和状态记忆方式。"
+        )
+        stack.addArrangedSubview(makeSettingRow("Caps Lock 行为", "Поведение Caps Lock / Caps Lock behavior", capsLockPopup))
+        stack.addArrangedSubview(makeCheckboxRow(perAppModeCheckbox, title: "按应用记住 RU/EN 模式", subtitle: "По приложениям / Remember RU/EN per app"))
+        stack.addArrangedSubview(makeCheckboxRow(temporaryEnglishCheckbox, title: "按住 Shift 临时英文输入", subtitle: "Временный English / Temporary English with Shift"))
+        stack.addArrangedSubview(makeCheckboxRow(persistModeCheckbox, title: "记住输入模式状态", subtitle: "Сохранять режим / Persist input mode state"))
+        stack.addArrangedSubview(makeCheckboxRow(shiftToastCheckbox, title: "切换模式时显示轻提示", subtitle: "Подсказка режима / Show mode switch toast"))
+        return wrapInCard(content: stack, inset: 20)
+    }
+
+    private func makeLexiconCard() -> NSView {
+        let stack = cardStack(
+            title: "词库开关",
+            subtitle: "Источники словаря / Dictionary sources\n控制系统词库、自定义词库与纠错能力。"
+        )
+        stack.addArrangedSubview(makeCheckboxRow(builtinDictionaryCheckbox, title: "启用内置词库", subtitle: "Встроенный словарь / Built-in dictionary"))
+        stack.addArrangedSubview(makeCheckboxRow(customDictionaryCheckbox, title: "启用自定义词库", subtitle: "Пользовательский словарь / Custom dictionary"))
+        stack.addArrangedSubview(makeCheckboxRow(correctionCheckbox, title: "启用纠错/模糊匹配", subtitle: "Исправление и нечёткий поиск / Auto-correction and fuzzy match"))
+        return wrapInCard(content: stack, inset: 20)
+    }
+
+    private func makeLearningCard() -> NSView {
+        let stack = cardStack(
+            title: "学习与联想",
+            subtitle: "Обучение и подсказки / Learning and prediction\n决定输入法是否根据你的选择自动调整排序。"
+        )
+        stack.addArrangedSubview(makeCheckboxRow(predictionCheckbox, title: "启用智能联想排序", subtitle: "Умные подсказки / Smart prediction ranking"))
+        stack.addArrangedSubview(makeCheckboxRow(latinPredictionCheckbox, title: "启用拉丁联想", subtitle: "Латинские подсказки / Latin transliteration prediction"))
+        stack.addArrangedSubview(makeCheckboxRow(learningCheckbox, title: "记住用户选词习惯", subtitle: "Запоминать выбор / Learn from candidate selection"))
+        return wrapInCard(content: stack, inset: 20)
+    }
+
+    private func makeLargeDictionarySection() -> NSView {
+        let title = NSTextField(labelWithString: "词库与学习数据")
+        title.font = .systemFont(ofSize: 20, weight: .bold)
+
+        let subtitle = NSTextField(labelWithString: "Словари и данные обучения / Lexicon and learning data\n自定义词库用于长期补充，学习词典预览用于调试排序与用户习惯。")
+        subtitle.font = .systemFont(ofSize: 13, weight: .regular)
+        subtitle.textColor = .secondaryLabelColor
+        subtitle.maximumNumberOfLines = 2
+
+        let customSection = makeEditorCard(
+            title: "自定义词库",
+            subtitle: "Пользовательский словарь / Custom dictionary\n每行一个词，可附频率，例如：`привет 520`",
+            textView: customDictionaryView,
+            primaryActionTitle: "保存自定义词库 / Save / Сохранить",
+            primaryAction: #selector(savePreferences)
+        )
+
+        let learnedSection = makeEditorCard(
+            title: "用户学习词典预览",
+            subtitle: "Просмотр обученного словаря / Learned dictionary preview\n查看学习到的排序数据，必要时可以一键清空。",
+            textView: learnedPreviewView,
+            primaryActionTitle: "清空学习记录 / Reset / Очистить",
+            primaryAction: #selector(resetLearningData)
+        )
+
+        let grid = makeEqualWidthRow(customSection, learnedSection)
+
+        let stack = NSStackView(views: [title, subtitle, grid])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 14
+        return stack
+    }
+
+    private func makeEqualWidthRow(_ left: NSView, _ right: NSView) -> NSView {
+        left.translatesAutoresizingMaskIntoConstraints = false
+        right.translatesAutoresizingMaskIntoConstraints = false
+
+        let row = NSStackView(views: [left, right])
+        row.orientation = .horizontal
+        row.alignment = .top
+        row.distribution = .fillEqually
+        row.spacing = 18
+        row.translatesAutoresizingMaskIntoConstraints = false
 
         NSLayoutConstraint.activate([
-            scrollView.heightAnchor.constraint(equalToConstant: 180)
+            left.widthAnchor.constraint(greaterThanOrEqualToConstant: 320),
+            right.widthAnchor.constraint(greaterThanOrEqualToConstant: 320)
         ])
-
-        let actionButton = NSButton(title: buttonTitle, target: self, action: buttonAction)
-        actionButton.bezelStyle = .rounded
-
-        let stack = NSStackView(views: [titleLabel, scrollView, actionButton])
-        stack.orientation = .vertical
-        stack.spacing = 10
-        return wrapInCard(stack)
-    }
-
-    private func makeLabeledRow(label: String, control: NSView) -> NSView {
-        let labelField = NSTextField(labelWithString: label)
-        labelField.font = .systemFont(ofSize: 13)
-
-        let row = NSStackView(views: [labelField, NSView(), control])
-        row.orientation = .horizontal
-        row.alignment = .centerY
-        row.spacing = 12
         return row
     }
 
-    private func wrapInCard(_ content: NSView) -> NSView {
+    private func makeEditorCard(title: String, subtitle: String, textView: NSTextView, primaryActionTitle: String, primaryAction: Selector) -> NSView {
+        let titleField = NSTextField(labelWithString: title)
+        titleField.font = .systemFont(ofSize: 16, weight: .semibold)
+
+        let subtitleField = NSTextField(labelWithString: subtitle)
+        subtitleField.font = .systemFont(ofSize: 12, weight: .regular)
+        subtitleField.textColor = .secondaryLabelColor
+
+        let scrollView = NSScrollView()
+        scrollView.borderType = .noBorder
+        scrollView.hasVerticalScroller = true
+        scrollView.drawsBackground = false
+        scrollView.wantsLayer = true
+        scrollView.layer?.cornerRadius = 14
+        scrollView.layer?.backgroundColor = NSColor.textBackgroundColor.withAlphaComponent(0.8).cgColor
+        scrollView.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.35).cgColor
+        scrollView.layer?.borderWidth = 1
+        scrollView.documentView = textView
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            scrollView.heightAnchor.constraint(equalToConstant: 260)
+        ])
+
+        let actionButton = makeProminentButton(title: primaryActionTitle, action: primaryAction)
+        let stack = NSStackView(views: [titleField, subtitleField, scrollView, actionButton])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 12
+        return wrapInCard(content: stack, inset: 18)
+    }
+
+    private func makeFooterBar() -> NSView {
+        let saveButton = makeProminentButton(title: "应用设置 / Apply / Применить", action: #selector(savePreferences))
+        let reloadButton = NSButton(title: "重新读取 / Reload / Перезагрузить", target: self, action: #selector(reloadPreferences))
+        reloadButton.bezelStyle = .rounded
+        reloadButton.controlSize = .large
+
+        let hint = NSTextField(labelWithString: "改动会立即同步到候选窗与输入行为。\nИзменения сразу применяются к окну кандидатов и логике ввода.\nChanges apply immediately to the candidate window and input behavior.")
+        hint.font = .systemFont(ofSize: 12, weight: .regular)
+        hint.textColor = .secondaryLabelColor
+        hint.maximumNumberOfLines = 3
+
+        let left = NSStackView(views: [hint])
+        left.orientation = .vertical
+
+        let right = NSStackView(views: [reloadButton, saveButton])
+        right.orientation = .horizontal
+        right.spacing = 10
+
+        let row = NSStackView(views: [left, NSView(), right])
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        return row
+    }
+
+    private func cardStack(title: String, subtitle: String) -> NSStackView {
+        let titleField = NSTextField(labelWithString: title)
+        titleField.font = .systemFont(ofSize: 17, weight: .bold)
+
+        let subtitleField = NSTextField(labelWithString: subtitle)
+        subtitleField.font = .systemFont(ofSize: 12, weight: .regular)
+        subtitleField.textColor = .secondaryLabelColor
+        subtitleField.maximumNumberOfLines = 2
+
+        let stack = NSStackView(views: [titleField, subtitleField])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 8
+        return stack
+    }
+
+    private func makeSettingRow(_ title: String, _ subtitle: String, _ control: NSView) -> NSView {
+        let titleField = NSTextField(labelWithString: title)
+        titleField.font = .systemFont(ofSize: 13, weight: .semibold)
+        titleField.textColor = .labelColor
+
+        let subtitleField = NSTextField(labelWithString: subtitle)
+        subtitleField.font = .systemFont(ofSize: 11, weight: .regular)
+        subtitleField.textColor = .secondaryLabelColor
+        subtitleField.maximumNumberOfLines = 2
+
+        let labelStack = NSStackView(views: [titleField, subtitleField])
+        labelStack.orientation = .vertical
+        labelStack.alignment = .leading
+        labelStack.spacing = 3
+
+        if let field = control as? NSTextField {
+            NSLayoutConstraint.activate([
+                field.widthAnchor.constraint(equalToConstant: 74)
+            ])
+        } else {
+            NSLayoutConstraint.activate([
+                control.widthAnchor.constraint(greaterThanOrEqualToConstant: 150)
+            ])
+        }
+
+        let row = NSStackView(views: [labelStack, NSView(), control])
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 14
+        return row
+    }
+
+    private func makeCheckboxRow(_ checkbox: NSButton, title: String, subtitle: String) -> NSView {
+        let titleField = NSTextField(labelWithString: title)
+        titleField.font = .systemFont(ofSize: 13, weight: .semibold)
+        titleField.textColor = .labelColor
+
+        let subtitleField = NSTextField(labelWithString: subtitle)
+        subtitleField.font = .systemFont(ofSize: 11, weight: .regular)
+        subtitleField.textColor = .secondaryLabelColor
+        subtitleField.maximumNumberOfLines = 2
+
+        let labels = NSStackView(views: [titleField, subtitleField])
+        labels.orientation = .vertical
+        labels.alignment = .leading
+        labels.spacing = 2
+
+        let row = NSStackView(views: [checkbox, labels])
+        row.orientation = .horizontal
+        row.alignment = .top
+        row.spacing = 8
+        return row
+    }
+
+    private func makeProminentButton(title: String, action: Selector) -> NSButton {
+        let button = NSButton(title: title, target: self, action: action)
+        button.bezelStyle = .rounded
+        button.controlSize = .large
+        button.contentTintColor = .white
+        button.wantsLayer = true
+        button.layer?.cornerRadius = 12
+        return button
+    }
+
+    private func makeBadge(title: String, tint: NSColor) -> NSView {
+        let label = NSTextField(labelWithString: title)
+        label.font = .systemFont(ofSize: 12, weight: .semibold)
+        label.textColor = tint.blended(withFraction: 0.1, of: .labelColor) ?? tint
+
         let container = NSView()
         container.wantsLayer = true
-        container.layer?.cornerRadius = 14
-        container.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.92).cgColor
-        container.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.4).cgColor
+        container.layer?.cornerRadius = 999
+        container.layer?.backgroundColor = tint.withAlphaComponent(0.12).cgColor
+
+        label.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
+            label.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
+            label.topAnchor.constraint(equalTo: container.topAnchor, constant: 6),
+            label.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -6)
+        ])
+        return container
+    }
+
+    private func wrapInCard(content: NSView, inset: CGFloat, accent: Bool = false) -> NSView {
+        let container = NSVisualEffectView()
+        container.material = .windowBackground
+        container.blendingMode = .withinWindow
+        container.state = .active
+        container.wantsLayer = true
+        container.layer?.backgroundColor = NSColor.white.cgColor
+        container.layer?.cornerRadius = 22
         container.layer?.borderWidth = 1
+        container.layer?.borderColor = (accent
+            ? NSColor.systemBlue.withAlphaComponent(0.18)
+            : NSColor.separatorColor.withAlphaComponent(0.28)).cgColor
+        container.layer?.shadowOpacity = 0.08
+        container.layer?.shadowRadius = 18
+        container.layer?.shadowOffset = CGSize(width: 0, height: -2)
+        container.layer?.shadowColor = NSColor.black.cgColor
 
         content.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(content)
         NSLayoutConstraint.activate([
-            content.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
-            content.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
-            content.topAnchor.constraint(equalTo: container.topAnchor, constant: 14),
-            content.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -14)
+            content.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: inset),
+            content.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -inset),
+            content.topAnchor.constraint(equalTo: container.topAnchor, constant: inset),
+            content.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -inset)
         ])
         return container
     }
@@ -206,6 +529,7 @@ final class PreferencesWindowController: NSWindowController {
         builtinDictionaryCheckbox.state = preferences.enableBuiltinDictionary ? .on : .off
         customDictionaryCheckbox.state = preferences.enableCustomDictionary ? .on : .off
         predictionCheckbox.state = preferences.enablePrediction ? .on : .off
+        latinPredictionCheckbox.state = preferences.enableLatinPrediction ? .on : .off
         learningCheckbox.state = preferences.enableLearning ? .on : .off
         correctionCheckbox.state = preferences.enableAutoCorrection ? .on : .off
         capsLockPopup.selectItem(at: InputPreferences.CapsLockBehavior.allCases.firstIndex(of: preferences.capsLockBehavior) ?? 0)
@@ -233,6 +557,7 @@ final class PreferencesWindowController: NSWindowController {
             enableBuiltinDictionary: builtinDictionaryCheckbox.state == .on,
             enableCustomDictionary: customDictionaryCheckbox.state == .on,
             enablePrediction: predictionCheckbox.state == .on,
+            enableLatinPrediction: latinPredictionCheckbox.state == .on,
             enableLearning: learningCheckbox.state == .on,
             enableAutoCorrection: correctionCheckbox.state == .on,
             maxCandidateCount: count,

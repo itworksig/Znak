@@ -1,11 +1,10 @@
 @preconcurrency import AppKit
 @preconcurrency import InputMethodKit
 
-@MainActor
-final class InputController: IMKInputController, @unchecked Sendable {
+final class InputController: IMKInputController {
     private static let maxCompositionLength = 20
     private static let candidatePageSize = 8
-    nonisolated(unsafe) private static var candidateWindowBootstrap: CandidateWindowController?
+    nonisolated(unsafe) private static weak var activeController: InputController?
 
     private enum InputMode {
         case russian
@@ -16,7 +15,10 @@ final class InputController: IMKInputController, @unchecked Sendable {
         let bundleIdentifier: String?
     }
 
-    private var engine = InputEngine()
+    private var engine = InputEngine(
+        preferences: PreferencesStore.shared.preferences.sanitized,
+        userLexicon: UserLexiconStore()
+    )
     private let candidateWindow: CandidateWindowController
     private var rawInput = ""
     private var currentCandidates: [InputEngine.Candidate] = []
@@ -26,9 +28,12 @@ final class InputController: IMKInputController, @unchecked Sendable {
     private var previousCommittedWord: String?
     private var lastModifierFlags: NSEvent.ModifierFlags = []
     private var standaloneShiftState = StandaloneShiftState()
-    nonisolated(unsafe) private var preferencesObserver: NSObjectProtocol?
+    private var preferencesObserver: NSObjectProtocol?
+    private var learningResetObserver: NSObjectProtocol?
+    private var appActivationObserver: NSObjectProtocol?
     private var temporaryEnglishActive = false
     private var modeToastTask: DispatchWorkItem?
+    private var activeClientBundleIdentifier: String?
 
     private struct StandaloneShiftState {
         var pressedKeyCode: UInt16?
@@ -65,25 +70,33 @@ final class InputController: IMKInputController, @unchecked Sendable {
     }
 
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
-        if Self.candidateWindowBootstrap == nil {
-            Self.candidateWindowBootstrap = CandidateWindowController()
-        }
-        candidateWindow = Self.candidateWindowBootstrap ?? CandidateWindowController()
+        candidateWindow = CandidateWindowController()
         super.init(server: server, delegate: delegate, client: inputClient)
-        let safeClient = Unchecked(value: inputClient)
-        MainActor.assumeIsolated {
-            restoreInputMode(for: safeClient.value)
-            candidateWindow.onCandidateSelected = { [weak self] index in
-                self?.selectCandidate(at: index)
-            }
-            candidateWindow.setInputModeLabel(inputMode == .english ? "EN" : "RU")
-            preferencesObserver = NotificationCenter.default.addObserver(
-                forName: .znakPreferencesDidChange,
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                self?.handlePreferencesDidChange()
-            }
+        restoreInputMode(for: inputClient)
+        candidateWindow.onCandidateSelected = { [weak self] index in
+            self?.selectCandidate(at: index)
+        }
+        candidateWindow.setInputModeLabel(inputMode == .english ? "EN" : "RU")
+        preferencesObserver = NotificationCenter.default.addObserver(
+            forName: .znakPreferencesDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handlePreferencesDidChange()
+        }
+        learningResetObserver = NotificationCenter.default.addObserver(
+            forName: .znakLearningDataDidReset,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleLearningDataDidReset()
+        }
+        appActivationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            self?.handleWorkspaceDidActivateApplication(notification)
         }
     }
 
@@ -91,164 +104,162 @@ final class InputController: IMKInputController, @unchecked Sendable {
         if let preferencesObserver {
             NotificationCenter.default.removeObserver(preferencesObserver)
         }
+        if let learningResetObserver {
+            NotificationCenter.default.removeObserver(learningResetObserver)
+        }
+        if let appActivationObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(appActivationObserver)
+        }
     }
 
-    nonisolated override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
-        let safeEvent = Unchecked(value: event)
-        let safeSender = Unchecked(value: sender)
-        return MainActor.assumeIsolated {
-            let event = safeEvent.value
-            let sender = safeSender.value
-            guard let event else { return false }
+    override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
+        assertMainThread()
+        guard let event else { return false }
+        markActive(for: sender)
 
-            if event.type == .flagsChanged {
-                return handleFlagsChanged(event, sender: sender)
-            }
+        if event.type == .flagsChanged {
+            return handleFlagsChanged(event, sender: sender)
+        }
 
-            guard event.type == .keyDown else { return false }
-            standaloneShiftState.noteKeyEvent()
+        guard event.type == .keyDown else { return false }
+        standaloneShiftState.noteKeyEvent()
 
-            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            let preferences = PreferencesStore.shared.preferences.sanitized
-            if flags.contains(.capsLock) {
-                switch preferences.capsLockBehavior {
-                case .passthrough:
-                    if let client = sender as? IMKTextInput, hasComposition {
-                        commitBestCandidate(client: client)
-                    }
-                    return false
-                case .toggleEnglish:
-                    setInputMode(.english, sender: sender)
-                    if hasComposition, let client = sender as? IMKTextInput {
-                        commitBestCandidate(client: client)
-                    }
-                    return false
-                case .uppercaseRussian:
-                    break
-                }
-            }
-
-            if flags.contains(.command) || flags.contains(.control) || flags.contains(.option) {
-                standaloneShiftState.cancel()
-                return false
-            }
-
-            guard let client = sender as? IMKTextInput else { return false }
-
-            if effectiveInputMode == .english {
-                if hasComposition {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let preferences = PreferencesStore.shared.preferences.sanitized
+        if flags.contains(.capsLock) {
+            switch preferences.capsLockBehavior {
+            case .passthrough:
+                if let client = sender as? IMKTextInput, hasComposition {
                     commitBestCandidate(client: client)
                 }
                 return false
-            }
-
-            switch event.keyCode {
-            // 数字键 1–8 选候选词
-            case 18...29:
-                guard hasComposition,
-                      let localIndex = candidateIndex(for: event),
-                      let index = candidateIndexInCurrentPage(localIndex: localIndex),
-                      currentCandidates.indices.contains(index)
-                else { break }
-                commitCandidate(at: index, client: client)
-                return true
-
-            // Space / Enter → 提交当前高亮候选
-            case 36, 49:
-                guard hasComposition else { return false }
-                commitSelectedCandidate(client: client)
-                return true
-
-            // Backspace
-            case 51:
-                guard hasComposition else { return false }
-                rawInput.removeLast()
-                updateComposition(client: client)
-                return true
-
-            // Left / Right / Up / Down / Tab
-            case 123:
-                guard hasComposition else { return false }
-                moveSelection(by: -1)
-                return true
-            case 124:
-                guard hasComposition else { return false }
-                moveSelection(by: 1)
-                return true
-            case 125:
-                guard hasComposition else { return false }
-                movePage(by: 1)
-                return true
-            case 126:
-                guard hasComposition else { return false }
-                movePage(by: -1)
-                return true
-            case 48:
-                guard hasComposition else { return false }
-                moveSelection(by: flags.contains(.shift) ? -1 : 1)
-                return true
-
-            // Escape → 取消
-            case 53:
-                guard hasComposition else { return false }
-                cancelComposition(client: client)
-                return true
-
-            default:
+            case .toggleEnglish:
+                setInputMode(.english, sender: sender)
+                if hasComposition, let client = sender as? IMKTextInput {
+                    commitBestCandidate(client: client)
+                }
+                return false
+            case .uppercaseRussian:
                 break
             }
+        }
 
-            guard let characters = event.characters,
-                  characters.count == 1,
-                  engine.mappedText(for: characters) != nil
-            else {
-                if hasComposition { commitSelectedCandidate(client: client) }
-                return false
+        if flags.contains(.command) || flags.contains(.control) || flags.contains(.option) {
+            standaloneShiftState.cancel()
+            return false
+        }
+
+        guard let client = sender as? IMKTextInput else { return false }
+
+        if effectiveInputMode == .english {
+            if hasComposition {
+                commitBestCandidate(client: client)
             }
+            return false
+        }
 
-            if rawInput.count >= Self.maxCompositionLength {
-                commitSelectedCandidate(client: client)
-            }
+        switch event.keyCode {
+        // 数字键 1–8 选候选词
+        case 18...29:
+            guard hasComposition,
+                  let localIndex = candidateIndex(for: event),
+                  let index = candidateIndexInCurrentPage(localIndex: localIndex),
+                  currentCandidates.indices.contains(index)
+            else { break }
+            commitCandidate(at: index, client: client)
+            return true
 
-            let appendedCharacters: String
-            if flags.contains(.capsLock) && preferences.capsLockBehavior == .uppercaseRussian {
-                appendedCharacters = characters.uppercased()
-            } else {
-                appendedCharacters = characters
-            }
+        // Space / Enter → 提交当前高亮候选
+        case 36, 49:
+            guard hasComposition else { return false }
+            commitSelectedCandidate(client: client)
+            return true
 
-            rawInput.append(appendedCharacters)
+        // Backspace
+        case 51:
+            guard hasComposition else { return false }
+            rawInput.removeLast()
             updateComposition(client: client)
             return true
-        }
-    }
 
-    nonisolated override func candidates(_ sender: Any!) -> [Any]! {
-        MainActor.assumeIsolated { () -> [String] in
-            currentCandidates.map(\.text)
-        }
-    }
+        // Left / Right / Up / Down / Tab
+        case 123:
+            guard hasComposition else { return false }
+            moveSelection(by: -1)
+            return true
+        case 124:
+            guard hasComposition else { return false }
+            moveSelection(by: 1)
+            return true
+        case 125:
+            guard hasComposition else { return false }
+            movePage(by: 1)
+            return true
+        case 126:
+            guard hasComposition else { return false }
+            movePage(by: -1)
+            return true
+        case 48:
+            guard hasComposition else { return false }
+            moveSelection(by: flags.contains(.shift) ? -1 : 1)
+            return true
 
-    nonisolated override func candidateSelected(_ candidateString: NSAttributedString!) {
-        let safeString = Unchecked(value: candidateString)
-        MainActor.assumeIsolated {
-            let candidateString = safeString.value
-            guard let candidateString,
-                  hasComposition,
-                  let index = currentCandidates.firstIndex(where: { $0.text == candidateString.string }),
-                  let client = client() else {
-                return
-            }
-            commitCandidate(at: index, client: client)
-        }
-    }
+        // Escape → 取消
+        case 53:
+            guard hasComposition else { return false }
+            cancelComposition(client: client)
+            return true
 
-    nonisolated override func commitComposition(_ sender: Any!) {
-        let safeSender = Unchecked(value: sender)
-        MainActor.assumeIsolated {
-            guard let client = safeSender.value as? IMKTextInput, hasComposition else { return }
+        default:
+            break
+        }
+
+        guard let characters = event.characters,
+              characters.count == 1,
+              engine.mappedText(for: characters) != nil
+        else {
+            if hasComposition { commitSelectedCandidate(client: client) }
+            return false
+        }
+
+        if rawInput.count >= Self.maxCompositionLength {
             commitSelectedCandidate(client: client)
         }
+
+        let appendedCharacters: String
+        if flags.contains(.capsLock) && preferences.capsLockBehavior == .uppercaseRussian {
+            appendedCharacters = characters.uppercased()
+        } else {
+            appendedCharacters = characters
+        }
+
+        rawInput.append(appendedCharacters)
+        updateComposition(client: client)
+        return true
+    }
+
+    override func candidates(_ sender: Any!) -> [Any]! {
+        assertMainThread()
+        markActive(for: sender)
+        return currentCandidates.map(\.text)
+    }
+
+    override func candidateSelected(_ candidateString: NSAttributedString!) {
+        assertMainThread()
+        guard let candidateString,
+              hasComposition,
+              let index = currentCandidates.firstIndex(where: { $0.text == candidateString.string }),
+              let client = client() else {
+            return
+        }
+        commitCandidate(at: index, client: client)
+    }
+
+    override func commitComposition(_ sender: Any!) {
+        assertMainThread()
+        markActive(for: sender)
+        guard let client = sender as? IMKTextInput, hasComposition else { return }
+        commitSelectedCandidate(client: client)
     }
 
     override func recognizedEvents(_ sender: Any!) -> Int {
@@ -258,6 +269,24 @@ final class InputController: IMKInputController, @unchecked Sendable {
     // MARK: - Private
 
     private var hasComposition: Bool { !rawInput.isEmpty }
+
+    private func markActive(for sender: Any!) {
+        if let activeController = Self.activeController, activeController !== self {
+            activeController.abandonComposition()
+        }
+        Self.activeController = self
+        activeClientBundleIdentifier = appContext(for: sender).bundleIdentifier
+    }
+
+    private func handleWorkspaceDidActivateApplication(_ notification: Notification) {
+        guard Self.activeController === self else { return }
+        let activatedApp = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+        guard let activeClientBundleIdentifier,
+              activatedApp?.bundleIdentifier != activeClientBundleIdentifier else {
+            return
+        }
+        abandonComposition()
+    }
 
     private func updateComposition(client: IMKTextInput) {
         guard hasComposition, let cyrillic = engine.mappedText(for: rawInput) else {
@@ -320,17 +349,39 @@ final class InputController: IMKInputController, @unchecked Sendable {
     }
 
     private func clearComposition(client: IMKTextInput) {
-        rawInput.removeAll()
-        currentCandidates.removeAll()
-        highlightedCandidateIndex = 0
-        currentPageIndex = 0
-        engine.reloadPreferences()
-        candidateWindow.hide()
+        resetCompositionState()
         client.setMarkedText(
             "",
             selectionRange: NSRange(location: 0, length: 0),
             replacementRange: NSRange(location: NSNotFound, length: NSNotFound)
         )
+    }
+
+    private func abandonComposition() {
+        if let client = client(), hasComposition {
+            client.setMarkedText(
+                "",
+                selectionRange: NSRange(location: 0, length: 0),
+                replacementRange: NSRange(location: NSNotFound, length: NSNotFound)
+            )
+        }
+        resetCompositionState()
+        if Self.activeController === self {
+            Self.activeController = nil
+        }
+    }
+
+    private func resetCompositionState() {
+        rawInput.removeAll()
+        currentCandidates.removeAll()
+        highlightedCandidateIndex = 0
+        currentPageIndex = 0
+        temporaryEnglishActive = false
+        standaloneShiftState.cancel()
+        modeToastTask?.cancel()
+        modeToastTask = nil
+        candidateWindow.hide()
+        updateInputModeLabel()
     }
 
     private func candidateIndex(for event: NSEvent) -> Int? {
@@ -585,7 +636,9 @@ final class InputController: IMKInputController, @unchecked Sendable {
 
     private func appContext(for sender: Any!) -> AppContext {
         let clientBundleIdentifier: String?
-        if let object = sender as AnyObject?,
+        let bundleIdentifierSelector = NSSelectorFromString("bundleIdentifier")
+        if let object = sender as? NSObject,
+           object.responds(to: bundleIdentifierSelector),
            let bundleIdentifier = object.value(forKey: "bundleIdentifier") as? String {
             clientBundleIdentifier = bundleIdentifier
         } else {
@@ -647,7 +700,7 @@ final class InputController: IMKInputController, @unchecked Sendable {
     }
 
     private func handlePreferencesDidChange() {
-        engine.reloadPreferences()
+        engine.updatePreferences(PreferencesStore.shared.preferences)
         restoreInputMode(for: client())
         updateInputModeLabel()
         if hasComposition,
@@ -655,6 +708,14 @@ final class InputController: IMKInputController, @unchecked Sendable {
             updateComposition(client: client)
         } else {
             candidateWindow.reloadTheme()
+        }
+    }
+
+    private func handleLearningDataDidReset() {
+        engine.replaceUserLexicon(UserLexiconStore())
+        if hasComposition,
+           let client = client() {
+            updateComposition(client: client)
         }
     }
 
@@ -669,8 +730,4 @@ final class InputController: IMKInputController, @unchecked Sendable {
     private func assertMainThread() {
         dispatchPrecondition(condition: .onQueue(.main))
     }
-}
-
-private struct Unchecked<T>: @unchecked Sendable {
-    let value: T
 }
