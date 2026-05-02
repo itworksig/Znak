@@ -6,6 +6,12 @@ Znak is a native macOS Input MethodKit keyboard for fast Russian input on a QWER
 
 Current version: `1.0.1`.
 
+
+<img width="919" height="253" alt="image" src="https://github.com/user-attachments/assets/fdc96e6b-985c-4d9f-aa6f-2281715bc424" />
+
+<img width="1474" height="852" alt="image" src="https://github.com/user-attachments/assets/b44ce0c8-db0f-41b2-9a77-ae48a2998473" />
+
+
 ## Highlights
 
 - QWERTY key-position mapping to Russian characters.
