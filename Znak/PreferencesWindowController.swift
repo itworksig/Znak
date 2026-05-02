@@ -27,6 +27,7 @@ final class PreferencesWindowController: NSWindowController {
     private let customDictionaryView = NSTextView()
     private let learnedPreviewView = NSTextView()
     private let subtitleLabel = NSTextField(labelWithString: "候选窗主题、词库与输入行为都可以在这里统一调整。\nТема окна кандидатов, словари и поведение ввода.\nTune candidate theme, dictionaries, and input behavior here.")
+    private let versionLabel = NSTextField(labelWithString: "")
     private var learningDiagnosticObserver: NSObjectProtocol?
 
     init(store: PreferencesStore = .shared) {
@@ -223,19 +224,47 @@ final class PreferencesWindowController: NSWindowController {
         subtitleLabel.textColor = .secondaryLabelColor
         subtitleLabel.maximumNumberOfLines = 3
 
+        versionLabel.stringValue = Self.appVersionDisplayText
+        versionLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+        versionLabel.textColor = .secondaryLabelColor
+        versionLabel.maximumNumberOfLines = 1
+
         let badges = NSStackView(views: [
             makeBadge(title: "RU/EN", tint: NSColor.systemBlue),
             makeBadge(title: "词库 / Словарь / Lexicon", tint: NSColor.systemOrange),
-            makeBadge(title: "候选窗 / Кандидаты / Candidates", tint: NSColor.systemTeal)
+            makeBadge(title: "候选窗 / Кандидаты / Candidates", tint: NSColor.systemTeal),
+            makeBadge(title: Self.appVersionDisplayText, tint: NSColor.systemGray)
         ])
         badges.orientation = .horizontal
         badges.spacing = 10
 
-        let stack = NSStackView(views: [title, subtitleLabel, badges])
+        let headerRow = NSStackView(views: [title, NSView(), versionLabel])
+        headerRow.orientation = .horizontal
+        headerRow.alignment = .firstBaseline
+        headerRow.spacing = 12
+
+        let stack = NSStackView(views: [headerRow, subtitleLabel, badges])
         stack.orientation = .vertical
-        stack.alignment = .leading
+        stack.alignment = .width
         stack.spacing = 10
         return wrapInCard(content: stack, inset: 22, accent: true)
+    }
+
+    private static var appVersionDisplayText: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String
+        let build = info?["CFBundleVersion"] as? String
+
+        switch (version?.isEmpty == false ? version : nil, build?.isEmpty == false ? build : nil) {
+        case let (.some(version), .some(build)):
+            return "v\(version) (\(build))"
+        case let (.some(version), nil):
+            return "v\(version)"
+        case (nil, let .some(build)):
+            return "build \(build)"
+        default:
+            return "version unknown"
+        }
     }
 
     private func makeAppearanceCard() -> NSView {
