@@ -747,17 +747,108 @@ final class PreferencesWindowController: NSWindowController {
                 return
             }
 
-            guard let pkg = release.assets.first(where: { $0.name.lowercased().hasSuffix(".pkg") }) else {
+            if let appZip = release.assets.first(where: { $0.name.lowercased().hasSuffix(".app.zip") }) {
+                self?.downloadAndInstallUpdateApp(from: appZip.browserDownloadURL, assetName: appZip.name, latestVersion: latestVersion)
+                return
+            }
+
+            if let pkg = release.assets.first(where: { $0.name.lowercased().hasSuffix(".pkg") }) {
+                self?.downloadUpdatePackage(from: pkg.browserDownloadURL, assetName: pkg.name, latestVersion: latestVersion)
+                return
+            }
+
+            DispatchQueue.main.async {
+                self?.showUpdateMessage(
+                    title: "发现新版本 / Update Available / Доступно обновление",
+                    message: "v\(latestVersion) 已发布，但没有找到 macOS app 或 pkg 安装包。\nA new version is available, but no macOS app or pkg asset was found.\nНовая версия доступна, но app/pkg установщик не найден."
+                )
+            }
+        }.resume()
+    }
+
+    private nonisolated func downloadAndInstallUpdateApp(from url: URL, assetName: String, latestVersion: String) {
+        URLSession.shared.downloadTask(with: url) { [weak self] temporaryURL, _, error in
+            if let error {
                 DispatchQueue.main.async {
                     self?.showUpdateMessage(
-                        title: "发现新版本 / Update Available / Доступно обновление",
-                        message: "v\(latestVersion) 已发布，但没有找到 macOS .pkg 安装包。\nA new version is available, but no macOS .pkg asset was found.\nНовая версия доступна, но .pkg установщик не найден."
+                        title: "下载失败 / Download Failed / Ошибка загрузки",
+                        message: "无法下载 v\(latestVersion)：\(error.localizedDescription)\nUnable to download the update.\nНе удалось загрузить обновление."
                     )
                 }
                 return
             }
 
-            self?.downloadUpdatePackage(from: pkg.browserDownloadURL, assetName: pkg.name, latestVersion: latestVersion)
+            guard let temporaryURL else {
+                DispatchQueue.main.async {
+                    self?.showUpdateMessage(
+                        title: "下载失败 / Download Failed / Ошибка загрузки",
+                        message: "下载文件不可用。\nThe downloaded file is unavailable.\nЗагруженный файл недоступен."
+                    )
+                }
+                return
+            }
+
+            let fileManager = FileManager.default
+            let workDirectory = fileManager.temporaryDirectory
+                .appendingPathComponent("ZnakUpdate-\(UUID().uuidString)", isDirectory: true)
+
+            do {
+                try fileManager.createDirectory(at: workDirectory, withIntermediateDirectories: true)
+                defer { try? fileManager.removeItem(at: workDirectory) }
+
+                let unzip = Process()
+                unzip.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+                unzip.arguments = ["-x", "-k", temporaryURL.path, workDirectory.path]
+                try unzip.run()
+                unzip.waitUntilExit()
+
+                guard unzip.terminationStatus == 0 else {
+                    throw NSError(domain: "ZnakUpdate", code: Int(unzip.terminationStatus), userInfo: [
+                        NSLocalizedDescriptionKey: "ditto failed to extract \(assetName)"
+                    ])
+                }
+
+                guard let extractedApp = Self.findExtractedZnakApp(in: workDirectory) else {
+                    throw NSError(domain: "ZnakUpdate", code: 1, userInfo: [
+                        NSLocalizedDescriptionKey: "Znak.app was not found in \(assetName)"
+                    ])
+                }
+
+                guard let userLibrary = fileManager.urls(for: .libraryDirectory, in: .userDomainMask).first else {
+                    throw NSError(domain: "ZnakUpdate", code: 2, userInfo: [
+                        NSLocalizedDescriptionKey: "User Library directory is unavailable"
+                    ])
+                }
+
+                let inputMethodsDirectory = userLibrary.appendingPathComponent("Input Methods", isDirectory: true)
+                let destination = inputMethodsDirectory.appendingPathComponent("Znak.app", isDirectory: true)
+                let stagingDestination = inputMethodsDirectory
+                    .appendingPathComponent("Znak.app.update-\(UUID().uuidString)", isDirectory: true)
+                try fileManager.createDirectory(at: inputMethodsDirectory, withIntermediateDirectories: true)
+                try fileManager.copyItem(at: extractedApp, to: stagingDestination)
+                if fileManager.fileExists(atPath: destination.path) {
+                    try fileManager.removeItem(at: destination)
+                }
+                try fileManager.moveItem(at: stagingDestination, to: destination)
+
+                DispatchQueue.main.async {
+                    self?.showUpdateMessage(
+                        title: "更新已安装 / Update Installed / Обновление установлено",
+                        message: "已安装 v\(latestVersion) 到当前用户输入法目录。Znak 将重新打开。\nInstalled v\(latestVersion) into the current user's Input Methods folder. Znak will reopen.\nВерсия v\(latestVersion) установлена в папку метода ввода текущего пользователя. Znak будет перезапущен."
+                    )
+                    NSWorkspace.shared.open(destination)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                        NSApp.terminate(nil)
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self?.showUpdateMessage(
+                        title: "安装失败 / Install Failed / Ошибка установки",
+                        message: "无法安装 v\(latestVersion)：\(error.localizedDescription)\nUnable to install the update.\nНе удалось установить обновление."
+                    )
+                }
+            }
         }.resume()
     }
 
@@ -818,6 +909,24 @@ final class PreferencesWindowController: NSWindowController {
         } else {
             alert.runModal()
         }
+    }
+
+    private nonisolated static func findExtractedZnakApp(in directory: URL) -> URL? {
+        let fileManager = FileManager.default
+        if fileManager.fileExists(atPath: directory.appendingPathComponent("Znak.app").path) {
+            return directory.appendingPathComponent("Znak.app")
+        }
+
+        guard let enumerator = fileManager.enumerator(
+            at: directory,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else { return nil }
+
+        for case let url as URL in enumerator where url.lastPathComponent == "Znak.app" {
+            return url
+        }
+        return nil
     }
 
     private nonisolated static var currentAppVersion: String {

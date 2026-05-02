@@ -1,15 +1,11 @@
 #!/bin/sh
 set -eu
 
-# Znak has historically been installed both per-user and system-wide during
-# development. A system-wide pkg install does not replace a user-level input
-# method with the same bundle id, and macOS may keep loading the stale user
-# copy. Remove the old copies before installing the new bundle.
+# Keep the system-wide target clean before pkgbuild installs the new payload.
+# Do not remove user-level input methods here: macOS may have the input source
+# registered against ~/Library/Input Methods/Znak.app, and deleting that path
+# during install can make the input method disappear from Keyboard settings.
+/usr/bin/killall Znak >/dev/null 2>&1 || true
 rm -rf "/Library/Input Methods/Znak.app"
-
-for home in /Users/*; do
-    [ -d "$home" ] || continue
-    rm -rf "$home/Library/Input Methods/Znak.app"
-done
 
 exit 0

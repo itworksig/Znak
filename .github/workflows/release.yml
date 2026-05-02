@@ -159,6 +159,7 @@ jobs:
 
           ditto -c -k --keepParent "$app_path" "$DIST/Znak-${VERSION}-macos-universal.app.zip"
           chmod +x script/pkg/preinstall script/pkg/postinstall
+          xattr -c script/pkg/preinstall script/pkg/postinstall 2>/dev/null || true
           pkgbuild \
             --component "$app_path" \
             --install-location "/Library/Input Methods" \
