@@ -227,7 +227,7 @@ final class InputController: IMKInputController {
         }
 
         let appendedCharacters: String
-        if flags.contains(.capsLock) && preferences.capsLockBehavior == .uppercaseRussian {
+        if flags.contains(.shift) || (flags.contains(.capsLock) && preferences.capsLockBehavior == .uppercaseRussian) {
             appendedCharacters = characters.uppercased()
         } else {
             appendedCharacters = characters
@@ -508,7 +508,6 @@ final class InputController: IMKInputController {
     }
 
     private func handleFlagsChanged(_ event: NSEvent, sender: Any!) -> Bool {
-        let preferences = PreferencesStore.shared.preferences.sanitized
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let previousFlags = lastModifierFlags
         lastModifierFlags = flags
@@ -529,18 +528,14 @@ final class InputController: IMKInputController {
             if !nonShiftFlags.isEmpty {
                 standaloneShiftState.noteOtherModifier()
             }
-            if preferences.enableTemporaryEnglishMode {
-                temporaryEnglishActive = true
-                updateInputModeLabel()
-            }
             return true
         }
 
         if isShiftKey && shiftWasDown && !shiftIsDown {
+            let shouldToggle = standaloneShiftState.shouldToggle(on: event.keyCode)
             standaloneShiftState.cancel()
-            if preferences.enableTemporaryEnglishMode {
-                temporaryEnglishActive = false
-                updateInputModeLabel()
+            if shouldToggle {
+                toggleEnglishMode(sender: sender)
             }
             return true
         }

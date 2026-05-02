@@ -13,7 +13,7 @@ permissions:
 jobs:
   release:
     name: Tag · Build universal macOS package · Release
-    runs-on: macos-14
+    runs-on: macos-15
 
     steps:
       - name: Checkout
@@ -103,12 +103,23 @@ jobs:
           echo "notes_path=${NOTES}" >> "$GITHUB_OUTPUT"
           cat "$NOTES"
 
-      - name: Select Xcode
+      - name: Select Xcode with Swift 6
         if: steps.tag_check.outputs.exists == 'false'
         shell: bash
         run: |
-          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          set -euo pipefail
+          for app in /Applications/Xcode_16*.app /Applications/Xcode.app; do
+            if [ -d "$app" ]; then
+              sudo xcode-select -s "$app/Contents/Developer"
+              break
+            fi
+          done
           xcodebuild -version
+          swiftc -version
+          if ! swiftc -version | grep -q 'Swift version 6'; then
+            echo 'Release builds require Xcode with Swift 6 support.' >&2
+            exit 1
+          fi
 
       - name: Build universal macOS app
         if: steps.tag_check.outputs.exists == 'false'

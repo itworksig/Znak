@@ -182,7 +182,7 @@ struct InputControllerBehavior {
             _ = commitSelectedText()
         }
 
-        let appendedCharacters = flags.contains(.capsLock) && preferences.capsLockBehavior == .uppercaseRussian
+        let appendedCharacters = flags.contains(.shift) || (flags.contains(.capsLock) && preferences.capsLockBehavior == .uppercaseRussian)
             ? characters.uppercased()
             : characters
         rawInput.append(appendedCharacters)
@@ -210,16 +210,14 @@ struct InputControllerBehavior {
             if !nonShiftFlags.isEmpty {
                 standaloneShiftState.noteOtherModifier()
             }
-            if preferences.enableTemporaryEnglishMode {
-                temporaryEnglishActive = true
-            }
             return true
         }
 
         if isShiftKey && shiftWasDown && !shiftIsDown {
+            let shouldToggle = standaloneShiftState.shouldToggle(on: keyCode)
             standaloneShiftState.cancel()
-            if preferences.enableTemporaryEnglishMode {
-                temporaryEnglishActive = false
+            if shouldToggle {
+                inputMode = inputMode == .russian ? .english : .russian
             }
             return true
         }

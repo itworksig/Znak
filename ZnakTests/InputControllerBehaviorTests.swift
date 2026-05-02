@@ -66,32 +66,33 @@ final class InputControllerBehaviorTests: XCTestCase {
         XCTAssertEqual(behavior.highlightedCandidateIndex, 0)
     }
 
-    func testShiftHoldEnablesTemporaryEnglishWithoutTogglingAfterKeyEvent() {
+    func testShiftHoldProducesUppercaseRussianWithoutTogglingEnglishMode() {
         var preferences = InputPreferences.default
         preferences.enableTemporaryEnglishMode = true
         var behavior = makeBehavior(preferences: preferences)
 
         XCTAssertTrue(behavior.handleFlagsChanged(keyCode: 56, flags: [.shift]))
-        XCTAssertEqual(behavior.effectiveInputMode, .english)
-
-        behavior.noteKeyEventDuringShift()
+        XCTAssertEqual(behavior.effectiveInputMode, .russian)
+        XCTAssertEqual(behavior.handleCharacter("q", flags: [.shift]), .handled)
+        XCTAssertEqual(behavior.rawInput, "Q")
         XCTAssertTrue(behavior.handleFlagsChanged(keyCode: 56, flags: []))
 
         XCTAssertEqual(behavior.inputMode, .russian)
         XCTAssertEqual(behavior.effectiveInputMode, .russian)
+        XCTAssertEqual(behavior.commitSelectedText(), "Й")
     }
 
-    func testSingleShiftClickOnlyTemporarilyEnablesEnglishMode() {
+    func testSingleShiftClickTogglesEnglishMode() {
         var preferences = InputPreferences.default
         preferences.enableTemporaryEnglishMode = true
         var behavior = makeBehavior(preferences: preferences)
 
         XCTAssertTrue(behavior.handleFlagsChanged(keyCode: 56, flags: [.shift]))
-        XCTAssertEqual(behavior.effectiveInputMode, .english)
+        XCTAssertEqual(behavior.effectiveInputMode, .russian)
         XCTAssertTrue(behavior.handleFlagsChanged(keyCode: 56, flags: []))
 
-        XCTAssertEqual(behavior.inputMode, .russian)
-        XCTAssertEqual(behavior.effectiveInputMode, .russian)
+        XCTAssertEqual(behavior.inputMode, .english)
+        XCTAssertEqual(behavior.effectiveInputMode, .english)
     }
 
     func testCapsLockPassthroughCommitsCompositionThenLetsKeyPassThrough() {
