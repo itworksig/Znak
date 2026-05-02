@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+
+# Stop any old loaded input method process so macOS can pick up the newly
+# installed bundle on the next activation.
+/usr/bin/killall Znak >/dev/null 2>&1 || true
+
+exit 0

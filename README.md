@@ -4,7 +4,7 @@
 
 Znak is a native macOS Input MethodKit keyboard for fast Russian input on a QWERTY keyboard. It maps Latin key positions to the Russian keyboard layout, provides dictionary and phrase candidates, learns from user selections, and ships with a native AppKit preferences window.
 
-Current version: `1.0.1`.
+Current version: `1.0.2`.
 
 
 <img width="919" height="253" alt="image" src="https://github.com/user-attachments/assets/fdc96e6b-985c-4d9f-aa6f-2281715bc424" />
@@ -251,7 +251,7 @@ xcodebuild \
   ONLY_ACTIVE_ARCH=NO \
   CODE_SIGN_IDENTITY='-' \
   CODE_SIGN_STYLE=Manual \
-  MARKETING_VERSION='1.0.1' \
+  MARKETING_VERSION='1.0.2' \
   CURRENT_PROJECT_VERSION='1' \
   SWIFT_VERSION='5.0' \
   clean build

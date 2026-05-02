@@ -4,7 +4,7 @@
 
 Znak — это нативный macOS-метод ввода на базе Input MethodKit для быстрого русского ввода с QWERTY-клавиатуры. Он сопоставляет латинские клавиши с русской раскладкой, показывает словарные и фразовые кандидаты, обучается на выборе пользователя и предоставляет нативное окно настроек AppKit.
 
-Текущая версия: `1.0.1`.
+Текущая версия: `1.0.2`.
 
 ## Возможности
 
@@ -235,7 +235,7 @@ xcodebuild \
   ONLY_ACTIVE_ARCH=NO \
   CODE_SIGN_IDENTITY='-' \
   CODE_SIGN_STYLE=Manual \
-  MARKETING_VERSION='1.0.1' \
+  MARKETING_VERSION='1.0.2' \
   CURRENT_PROJECT_VERSION='1' \
   SWIFT_VERSION='5.0' \
   clean build

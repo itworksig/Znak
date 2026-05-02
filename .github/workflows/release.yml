@@ -158,9 +158,11 @@ jobs:
           mkdir -p "$DIST"
 
           ditto -c -k --keepParent "$app_path" "$DIST/Znak-${VERSION}-macos-universal.app.zip"
+          chmod +x script/pkg/preinstall script/pkg/postinstall
           pkgbuild \
             --component "$app_path" \
             --install-location "/Library/Input Methods" \
+            --scripts script/pkg \
             "$DIST/Znak-${VERSION}-macos-universal.pkg"
 
           shasum -a 256 "$DIST"/* > "$DIST/SHA256SUMS.txt"

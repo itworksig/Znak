@@ -4,7 +4,7 @@
 
 Znak 是一个原生 macOS Input MethodKit 输入法，用来在 QWERTY 键盘上快速输入俄语。它支持键位直映、词库候选、短语候选、模糊纠错、用户学习、候选排序偏好、自定义词库，以及原生 AppKit 设置窗口。
 
-当前版本：`1.0.1`。
+当前版本：`1.0.2`。
 
 ## 功能概览
 
@@ -235,7 +235,7 @@ xcodebuild \
   ONLY_ACTIVE_ARCH=NO \
   CODE_SIGN_IDENTITY='-' \
   CODE_SIGN_STYLE=Manual \
-  MARKETING_VERSION='1.0.1' \
+  MARKETING_VERSION='1.0.2' \
   CURRENT_PROJECT_VERSION='1' \
   SWIFT_VERSION='5.0' \
   clean build
