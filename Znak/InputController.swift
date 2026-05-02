@@ -537,14 +537,10 @@ final class InputController: IMKInputController {
         }
 
         if isShiftKey && shiftWasDown && !shiftIsDown {
-            let shouldToggle = standaloneShiftState.shouldToggle(on: event.keyCode)
             standaloneShiftState.cancel()
             if preferences.enableTemporaryEnglishMode {
                 temporaryEnglishActive = false
                 updateInputModeLabel()
-            }
-            if shouldToggle {
-                toggleEnglishMode(sender: sender)
             }
             return true
         }
@@ -619,6 +615,12 @@ final class InputController: IMKInputController {
 
     private func restoreInputMode(for sender: Any!) {
         let preferences = PreferencesStore.shared.preferences.sanitized
+        guard preferences.persistInputModeState else {
+            inputMode = .russian
+            temporaryEnglishActive = false
+            return
+        }
+
         let state = PreferencesStore.shared.loadInputModeState()
         let appId = appContext(for: sender).bundleIdentifier
 

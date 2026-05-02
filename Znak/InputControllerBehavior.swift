@@ -217,13 +217,9 @@ struct InputControllerBehavior {
         }
 
         if isShiftKey && shiftWasDown && !shiftIsDown {
-            let shouldToggle = standaloneShiftState.shouldToggle(on: keyCode)
             standaloneShiftState.cancel()
             if preferences.enableTemporaryEnglishMode {
                 temporaryEnglishActive = false
-            }
-            if shouldToggle {
-                inputMode = inputMode == .russian ? .english : .russian
             }
             return true
         }

@@ -81,7 +81,7 @@ final class InputControllerBehaviorTests: XCTestCase {
         XCTAssertEqual(behavior.effectiveInputMode, .russian)
     }
 
-    func testSingleShiftClickTogglesEnglishMode() {
+    func testSingleShiftClickOnlyTemporarilyEnablesEnglishMode() {
         var preferences = InputPreferences.default
         preferences.enableTemporaryEnglishMode = true
         var behavior = makeBehavior(preferences: preferences)
@@ -90,8 +90,8 @@ final class InputControllerBehaviorTests: XCTestCase {
         XCTAssertEqual(behavior.effectiveInputMode, .english)
         XCTAssertTrue(behavior.handleFlagsChanged(keyCode: 56, flags: []))
 
-        XCTAssertEqual(behavior.inputMode, .english)
-        XCTAssertEqual(behavior.effectiveInputMode, .english)
+        XCTAssertEqual(behavior.inputMode, .russian)
+        XCTAssertEqual(behavior.effectiveInputMode, .russian)
     }
 
     func testCapsLockPassthroughCommitsCompositionThenLetsKeyPassThrough() {
