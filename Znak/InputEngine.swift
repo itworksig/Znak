@@ -230,6 +230,17 @@ struct InputEngine {
     }
 
     mutating func candidates(for input: String, previousWord: String? = nil, limit: Int = 8) -> [Candidate] {
+        #if DEBUG
+        let startTime = DispatchTime.now()
+        defer {
+            let elapsed = DispatchTime.now().uptimeNanoseconds - startTime.uptimeNanoseconds
+            let elapsedMilliseconds = Double(elapsed) / 1_000_000
+            if elapsedMilliseconds > 10 {
+                NSLog("[Znak] Candidate query %.2fms input=%@ limit=%d", elapsedMilliseconds, input, limit)
+            }
+        }
+        #endif
+
         let normalizedInput = input.lowercased()
         guard !normalizedInput.isEmpty else {
             return []
@@ -269,21 +280,36 @@ struct InputEngine {
             )
             : []
 
+        let mappedFallback = mappedOutput.flatMap { output in
+            output.isEmpty ? nil : Self.makeCandidate(
+                text: output,
+                frequency: Int.max,
+                source: .mapped,
+                debugSummary: "来源: 键位直映 | 兜底候选 | 排序偏好: \(preferences.candidateRankingPreference.displayName)"
+            )
+        }
+
+        let layers: [[Candidate]]
+        let shouldAppendMappedFallbackOnlyWhenEmpty: Bool
+        switch preferences.candidateRankingPreference {
+        case .commonWords:
+            layers = [dictionaryMatches, phraseMatches, fuzzyMatches]
+            shouldAppendMappedFallbackOnlyWhenEmpty = true
+        case .directMapping:
+            layers = [mappedFallback.map { [$0] } ?? [], dictionaryMatches, phraseMatches, fuzzyMatches]
+            shouldAppendMappedFallbackOnlyWhenEmpty = false
+        case .phrases:
+            layers = [phraseMatches, dictionaryMatches, fuzzyMatches]
+            shouldAppendMappedFallbackOnlyWhenEmpty = true
+        }
+
         var matches: [Candidate] = []
         var seen = Set<String>()
-        appendUnique(dictionaryMatches, to: &matches, seen: &seen)
-        appendUnique(phraseMatches, to: &matches, seen: &seen)
-        appendUnique(fuzzyMatches, to: &matches, seen: &seen)
-
-        if matches.isEmpty, let mappedOutput, !mappedOutput.isEmpty {
-            matches.append(
-                Self.makeCandidate(
-                    text: mappedOutput,
-                    frequency: Int.max,
-                    source: .mapped,
-                    debugSummary: "来源: 映射 | 精确命中"
-                )
-            )
+        for layer in layers {
+            appendUnique(layer, to: &matches, seen: &seen)
+        }
+        if shouldAppendMappedFallbackOnlyWhenEmpty, matches.isEmpty, let mappedFallback {
+            appendUnique([mappedFallback], to: &matches, seen: &seen)
         }
 
         return Array(matches.prefix(limit))
@@ -915,6 +941,7 @@ struct UserLexiconStore: InputLearningStore {
         var bigramScores: [String: [String: Int]]
         var phraseScores: [String: [String: Int]]
         var recentSelections: [RecentSelection]
+        var selectionSequence: Int
 
         init(
             version: Int,
@@ -922,7 +949,8 @@ struct UserLexiconStore: InputLearningStore {
             inputWordScores: [String: [String: Int]],
             bigramScores: [String: [String: Int]],
             phraseScores: [String: [String: Int]],
-            recentSelections: [RecentSelection]
+            recentSelections: [RecentSelection],
+            selectionSequence: Int = 0
         ) {
             self.version = version
             self.wordScores = wordScores
@@ -930,6 +958,7 @@ struct UserLexiconStore: InputLearningStore {
             self.bigramScores = bigramScores
             self.phraseScores = phraseScores
             self.recentSelections = recentSelections
+            self.selectionSequence = selectionSequence
         }
 
         init(from decoder: Decoder) throws {
@@ -940,6 +969,7 @@ struct UserLexiconStore: InputLearningStore {
             bigramScores = try container.decodeIfPresent([String: [String: Int]].self, forKey: .bigramScores) ?? [:]
             phraseScores = try container.decodeIfPresent([String: [String: Int]].self, forKey: .phraseScores) ?? [:]
             recentSelections = try container.decodeIfPresent([RecentSelection].self, forKey: .recentSelections) ?? []
+            selectionSequence = try container.decodeIfPresent(Int.self, forKey: .selectionSequence) ?? recentSelections.map(\.sequence).max() ?? 0
         }
     }
 
@@ -949,7 +979,7 @@ struct UserLexiconStore: InputLearningStore {
         var sequence: Int
     }
 
-    private static let schemaVersion = 3
+    private static let schemaVersion = 4
     private static let flushDelay: TimeInterval = 1.5
     private static let maxWordBonus = 120
     private static let maxInputBonus = 260
@@ -982,7 +1012,7 @@ struct UserLexiconStore: InputLearningStore {
         bigramScores = persisted.bigramScores
         phraseScores = persisted.phraseScores
         recentSelections = persisted.recentSelections
-        selectionSequence = persisted.recentSelections.map(\.sequence).max() ?? 0
+        selectionSequence = persisted.selectionSequence
         sanitizeAndRepairIfNeeded()
     }
 
@@ -1036,11 +1066,29 @@ struct UserLexiconStore: InputLearningStore {
             }
         }
         selectionSequence += 1
+        applyFrequencyDecayIfNeeded()
         recentSelections.append(RecentSelection(word: wordKey, previousWord: previousWord.flatMap(Self.normalizedWordKey), sequence: selectionSequence))
         if recentSelections.count > Self.recentWindow {
             recentSelections.removeFirst(recentSelections.count - Self.recentWindow)
         }
         scheduleFlush()
+    }
+
+    private mutating func applyFrequencyDecayIfNeeded() {
+        guard selectionSequence > 0, selectionSequence % 64 == 0 else { return }
+        wordScores = Self.decayedScores(wordScores)
+        inputWordScores = inputWordScores.mapValues(Self.decayedScores)
+        bigramScores = bigramScores.mapValues(Self.decayedScores)
+        phraseScores = phraseScores.mapValues(Self.decayedScores)
+    }
+
+    private static func decayedScores(_ scores: [String: Int]) -> [String: Int] {
+        scores.reduce(into: [String: Int]()) { result, entry in
+            let value = Int(Double(entry.value) * 0.88)
+            if value >= 2 {
+                result[entry.key] = value
+            }
+        }
     }
 
     private mutating func scheduleFlush() {
@@ -1052,7 +1100,8 @@ struct UserLexiconStore: InputLearningStore {
             inputWordScores: inputWordScores,
             bigramScores: bigramScores,
             phraseScores: phraseScores,
-            recentSelections: recentSelections
+            recentSelections: recentSelections,
+            selectionSequence: selectionSequence
         )
 
         let workItem = DispatchWorkItem { [storageURL, backupURL] in
@@ -1105,7 +1154,8 @@ struct UserLexiconStore: InputLearningStore {
                 inputWordScores: [:],
                 bigramScores: [:],
                 phraseScores: [:],
-                recentSelections: []
+                recentSelections: [],
+                selectionSequence: 0
             )
         }
 
@@ -1116,7 +1166,7 @@ struct UserLexiconStore: InputLearningStore {
             publishDiagnostic("Moved damaged user lexicon to \(damagedURL.path).")
         }
 
-        return PersistedLexicon(version: schemaVersion, wordScores: [:], inputWordScores: [:], bigramScores: [:], phraseScores: [:], recentSelections: [])
+        return PersistedLexicon(version: schemaVersion, wordScores: [:], inputWordScores: [:], bigramScores: [:], phraseScores: [:], recentSelections: [], selectionSequence: 0)
     }
 
     private static func loadPersistedLexicon(from url: URL?) -> PersistedLexicon? {

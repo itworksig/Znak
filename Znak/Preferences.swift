@@ -28,6 +28,32 @@ struct InputPreferences: Codable, Equatable {
         }
     }
 
+    enum CandidateRankingPreference: String, CaseIterable, Codable {
+        case commonWords
+        case directMapping
+        case phrases
+
+        var displayName: String {
+            switch self {
+            case .commonWords: return "优先常用词 / Частотные слова / Common words"
+            case .directMapping: return "优先键位直映 / Прямая раскладка / Direct mapping"
+            case .phrases: return "优先短语 / Фразы / Phrases first"
+            }
+        }
+    }
+
+    enum CandidateLayout: String, CaseIterable, Codable {
+        case horizontal
+        case vertical
+
+        var displayName: String {
+            switch self {
+            case .horizontal: return "横向 / Горизонтально / Horizontal"
+            case .vertical: return "纵向 / Вертикально / Vertical"
+            }
+        }
+    }
+
     enum CapsLockBehavior: String, CaseIterable, Codable {
         case passthrough
         case uppercaseRussian
@@ -50,6 +76,9 @@ struct InputPreferences: Codable, Equatable {
     var enableLearning: Bool
     var enableAutoCorrection: Bool
     var maxCandidateCount: Int
+    var candidateRankingPreference: CandidateRankingPreference
+    var candidateLayout: CandidateLayout
+    var candidateFontSize: Int
     var customDictionaryText: String
     var capsLockBehavior: CapsLockBehavior
     var rememberModePerApp: Bool
@@ -61,6 +90,102 @@ struct InputPreferences: Codable, Equatable {
     var showCandidateDebugInfo: Bool
     var enableCandidateAnimations: Bool
 
+    private enum CodingKeys: String, CodingKey {
+        case themePreset
+        case enableBuiltinDictionary
+        case enableCustomDictionary
+        case enablePrediction
+        case enableLatinPrediction
+        case enableLearning
+        case enableAutoCorrection
+        case maxCandidateCount
+        case candidateRankingPreference
+        case candidateLayout
+        case candidateFontSize
+        case customDictionaryText
+        case capsLockBehavior
+        case rememberModePerApp
+        case enableTemporaryEnglishMode
+        case persistInputModeState
+        case showShiftModeToast
+        case preeditStyle
+        case showCandidateDetails
+        case showCandidateDebugInfo
+        case enableCandidateAnimations
+    }
+
+    init(
+        themePreset: ZnakThemePreset,
+        enableBuiltinDictionary: Bool,
+        enableCustomDictionary: Bool,
+        enablePrediction: Bool,
+        enableLatinPrediction: Bool,
+        enableLearning: Bool,
+        enableAutoCorrection: Bool,
+        maxCandidateCount: Int,
+        candidateRankingPreference: CandidateRankingPreference,
+        candidateLayout: CandidateLayout,
+        candidateFontSize: Int,
+        customDictionaryText: String,
+        capsLockBehavior: CapsLockBehavior,
+        rememberModePerApp: Bool,
+        enableTemporaryEnglishMode: Bool,
+        persistInputModeState: Bool,
+        showShiftModeToast: Bool,
+        preeditStyle: PreeditStyle,
+        showCandidateDetails: Bool,
+        showCandidateDebugInfo: Bool,
+        enableCandidateAnimations: Bool
+    ) {
+        self.themePreset = themePreset
+        self.enableBuiltinDictionary = enableBuiltinDictionary
+        self.enableCustomDictionary = enableCustomDictionary
+        self.enablePrediction = enablePrediction
+        self.enableLatinPrediction = enableLatinPrediction
+        self.enableLearning = enableLearning
+        self.enableAutoCorrection = enableAutoCorrection
+        self.maxCandidateCount = maxCandidateCount
+        self.candidateRankingPreference = candidateRankingPreference
+        self.candidateLayout = candidateLayout
+        self.candidateFontSize = candidateFontSize
+        self.customDictionaryText = customDictionaryText
+        self.capsLockBehavior = capsLockBehavior
+        self.rememberModePerApp = rememberModePerApp
+        self.enableTemporaryEnglishMode = enableTemporaryEnglishMode
+        self.persistInputModeState = persistInputModeState
+        self.showShiftModeToast = showShiftModeToast
+        self.preeditStyle = preeditStyle
+        self.showCandidateDetails = showCandidateDetails
+        self.showCandidateDebugInfo = showCandidateDebugInfo
+        self.enableCandidateAnimations = enableCandidateAnimations
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let fallback = InputPreferences.default
+        themePreset = try container.decodeIfPresent(ZnakThemePreset.self, forKey: .themePreset) ?? fallback.themePreset
+        enableBuiltinDictionary = try container.decodeIfPresent(Bool.self, forKey: .enableBuiltinDictionary) ?? fallback.enableBuiltinDictionary
+        enableCustomDictionary = try container.decodeIfPresent(Bool.self, forKey: .enableCustomDictionary) ?? fallback.enableCustomDictionary
+        enablePrediction = try container.decodeIfPresent(Bool.self, forKey: .enablePrediction) ?? fallback.enablePrediction
+        enableLatinPrediction = try container.decodeIfPresent(Bool.self, forKey: .enableLatinPrediction) ?? fallback.enableLatinPrediction
+        enableLearning = try container.decodeIfPresent(Bool.self, forKey: .enableLearning) ?? fallback.enableLearning
+        enableAutoCorrection = try container.decodeIfPresent(Bool.self, forKey: .enableAutoCorrection) ?? fallback.enableAutoCorrection
+        maxCandidateCount = try container.decodeIfPresent(Int.self, forKey: .maxCandidateCount) ?? fallback.maxCandidateCount
+        candidateRankingPreference = try container.decodeIfPresent(CandidateRankingPreference.self, forKey: .candidateRankingPreference) ?? fallback.candidateRankingPreference
+        candidateLayout = try container.decodeIfPresent(CandidateLayout.self, forKey: .candidateLayout) ?? fallback.candidateLayout
+        candidateFontSize = try container.decodeIfPresent(Int.self, forKey: .candidateFontSize) ?? fallback.candidateFontSize
+        customDictionaryText = try container.decodeIfPresent(String.self, forKey: .customDictionaryText) ?? fallback.customDictionaryText
+        capsLockBehavior = try container.decodeIfPresent(CapsLockBehavior.self, forKey: .capsLockBehavior) ?? fallback.capsLockBehavior
+        rememberModePerApp = try container.decodeIfPresent(Bool.self, forKey: .rememberModePerApp) ?? fallback.rememberModePerApp
+        enableTemporaryEnglishMode = try container.decodeIfPresent(Bool.self, forKey: .enableTemporaryEnglishMode) ?? fallback.enableTemporaryEnglishMode
+        persistInputModeState = try container.decodeIfPresent(Bool.self, forKey: .persistInputModeState) ?? fallback.persistInputModeState
+        showShiftModeToast = try container.decodeIfPresent(Bool.self, forKey: .showShiftModeToast) ?? fallback.showShiftModeToast
+        preeditStyle = try container.decodeIfPresent(PreeditStyle.self, forKey: .preeditStyle) ?? fallback.preeditStyle
+        showCandidateDetails = try container.decodeIfPresent(Bool.self, forKey: .showCandidateDetails) ?? fallback.showCandidateDetails
+        showCandidateDebugInfo = try container.decodeIfPresent(Bool.self, forKey: .showCandidateDebugInfo) ?? fallback.showCandidateDebugInfo
+        enableCandidateAnimations = try container.decodeIfPresent(Bool.self, forKey: .enableCandidateAnimations) ?? fallback.enableCandidateAnimations
+    }
+
     static let `default` = InputPreferences(
         themePreset: .sogou,
         enableBuiltinDictionary: true,
@@ -70,6 +195,9 @@ struct InputPreferences: Codable, Equatable {
         enableLearning: true,
         enableAutoCorrection: true,
         maxCandidateCount: 24,
+        candidateRankingPreference: .commonWords,
+        candidateLayout: .horizontal,
+        candidateFontSize: 19,
         customDictionaryText: """
         # 每行一个词，可选频率：词 频率
         """,
@@ -199,6 +327,7 @@ extension InputPreferences {
     var sanitized: InputPreferences {
         var copy = self
         copy.maxCandidateCount = min(max(copy.maxCandidateCount, 8), 64)
+        copy.candidateFontSize = min(max(copy.candidateFontSize, 14), 28)
         return copy
     }
 }

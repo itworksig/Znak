@@ -164,6 +164,69 @@ final class InputEngineTests: XCTestCase {
         XCTAssertEqual(engine.candidates(for: "prkv").map(\.text), ["пркв тест", "привет"])
     }
 
+
+    func testDirectMappingRankingPreferencePutsMappedCandidateFirst() {
+        var preferences = InputPreferences.default
+        preferences.candidateRankingPreference = .directMapping
+        var engine = makeEngine(dictionaryText: "привет 100", preferences: preferences)
+
+        XCTAssertEqual(Array(engine.candidates(for: "ghb").map(\.text).prefix(2)), ["при", "привет"])
+    }
+
+    func testPhraseRankingPreferencePutsPhraseBeforeDictionary() {
+        var preferences = InputPreferences.default
+        preferences.candidateRankingPreference = .phrases
+        let learningStore = TestLearningStore(
+            phraseCandidates: [
+                InputEngine.PhraseCandidate(
+                    anchor: nil,
+                    text: "при этом",
+                    frequency: 1,
+                    normalizedText: "при этом",
+                    transliteration: InputEngine.transliterationKey(for: "при этом")
+                )
+            ]
+        )
+        var engine = InputEngine(
+            dictionaryText: "привет 100",
+            preferences: preferences,
+            userLexicon: learningStore
+        )
+
+        XCTAssertEqual(Array(engine.candidates(for: "ghb").map(\.text).prefix(2)), ["при этом", "привет"])
+    }
+
+    func testPreferencesDecodeMissingNewCandidateFieldsWithDefaults() throws {
+        let data = """
+        {
+          "themePreset": "sogou",
+          "enableBuiltinDictionary": true,
+          "enableCustomDictionary": true,
+          "enablePrediction": true,
+          "enableLatinPrediction": false,
+          "enableLearning": true,
+          "enableAutoCorrection": true,
+          "maxCandidateCount": 24,
+          "customDictionaryText": "",
+          "capsLockBehavior": "passthrough",
+          "rememberModePerApp": true,
+          "enableTemporaryEnglishMode": true,
+          "persistInputModeState": false,
+          "showShiftModeToast": true,
+          "preeditStyle": "underline",
+          "showCandidateDetails": false,
+          "showCandidateDebugInfo": false,
+          "enableCandidateAnimations": true
+        }
+        """.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(InputPreferences.self, from: data)
+
+        XCTAssertEqual(decoded.candidateRankingPreference, .commonWords)
+        XCTAssertEqual(decoded.candidateLayout, .horizontal)
+        XCTAssertEqual(decoded.candidateFontSize, 19)
+    }
+
     func testUserLexiconMigratesVersionedDataWithMissingNewFields() throws {
         let directory = try makeTemporaryDirectory()
         let url = directory.appendingPathComponent("user_dictionary.json")

@@ -1,9 +1,31 @@
 @preconcurrency import AppKit
+import UniformTypeIdentifiers
 
 final class PreferencesWindowController: NSWindowController {
     private static let defaultWindowSize = NSSize(width: 980, height: 820)
     private static let minimumWindowSize = NSSize(width: 920, height: 760)
     private static let maxWindowSize = NSSize(width: 1600, height: 1400)
+    private static let latestReleaseURL = URL(string: "https://api.github.com/repos/itworksig/Znak/releases/latest")!
+
+    private struct GitHubRelease: Decodable {
+        let tagName: String
+        let assets: [GitHubReleaseAsset]
+
+        enum CodingKeys: String, CodingKey {
+            case tagName = "tag_name"
+            case assets
+        }
+    }
+
+    private struct GitHubReleaseAsset: Decodable {
+        let name: String
+        let browserDownloadURL: URL
+
+        enum CodingKeys: String, CodingKey {
+            case name
+            case browserDownloadURL = "browser_download_url"
+        }
+    }
 
     private let store: PreferencesStore
 
@@ -20,10 +42,13 @@ final class PreferencesWindowController: NSWindowController {
     private let shiftToastCheckbox = NSButton(checkboxWithTitle: "", target: nil, action: nil)
     private let capsLockPopup = NSPopUpButton()
     private let preeditStylePopup = NSPopUpButton()
+    private let rankingPopup = NSPopUpButton()
+    private let candidateLayoutPopup = NSPopUpButton()
     private let candidateDetailsCheckbox = NSButton(checkboxWithTitle: "", target: nil, action: nil)
     private let candidateDebugCheckbox = NSButton(checkboxWithTitle: "", target: nil, action: nil)
     private let candidateAnimationsCheckbox = NSButton(checkboxWithTitle: "", target: nil, action: nil)
     private let candidateCountField = NSTextField()
+    private let candidateFontSizeField = NSTextField()
     private let customDictionaryView = NSTextView()
     private let learnedPreviewView = NSTextView()
     private let subtitleLabel = NSTextField(labelWithString: "候选窗主题、词库与输入行为都可以在这里统一调整。\nТема окна кандидатов, словари и поведение ввода.\nTune candidate theme, dictionaries, and input behavior here.")
@@ -182,17 +207,21 @@ final class PreferencesWindowController: NSWindowController {
         themePopup.addItems(withTitles: ZnakThemePreset.allCases.map(\.displayName))
         capsLockPopup.addItems(withTitles: InputPreferences.CapsLockBehavior.allCases.map(\.displayName))
         preeditStylePopup.addItems(withTitles: InputPreferences.PreeditStyle.allCases.map(\.displayName))
+        rankingPopup.addItems(withTitles: InputPreferences.CandidateRankingPreference.allCases.map(\.displayName))
+        candidateLayoutPopup.addItems(withTitles: InputPreferences.CandidateLayout.allCases.map(\.displayName))
 
-        [themePopup, capsLockPopup, preeditStylePopup].forEach {
+        [themePopup, capsLockPopup, preeditStylePopup, rankingPopup, candidateLayoutPopup].forEach {
             $0.controlSize = .large
             $0.font = .systemFont(ofSize: 13, weight: .medium)
         }
 
-        candidateCountField.alignment = .center
-        candidateCountField.controlSize = .large
-        candidateCountField.font = .monospacedDigitSystemFont(ofSize: 14, weight: .semibold)
-        candidateCountField.wantsLayer = true
-        candidateCountField.layer?.cornerRadius = 10
+        [candidateCountField, candidateFontSizeField].forEach { field in
+            field.alignment = .center
+            field.controlSize = .large
+            field.font = .monospacedDigitSystemFont(ofSize: 14, weight: .semibold)
+            field.wantsLayer = true
+            field.layer?.cornerRadius = 10
+        }
 
         [builtinDictionaryCheckbox, customDictionaryCheckbox, predictionCheckbox, latinPredictionCheckbox, learningCheckbox, correctionCheckbox,
          perAppModeCheckbox, temporaryEnglishCheckbox, persistModeCheckbox, shiftToastCheckbox,
@@ -276,7 +305,10 @@ final class PreferencesWindowController: NSWindowController {
         )
         stack.addArrangedSubview(makeSettingRow("候选窗主题", "Тема окна / Window theme", themePopup))
         stack.addArrangedSubview(makeSettingRow("预编辑样式", "Стиль предредактирования / Preedit style", preeditStylePopup))
+        stack.addArrangedSubview(makeSettingRow("候选排序偏好", "Приоритет кандидатов / Candidate priority", rankingPopup))
+        stack.addArrangedSubview(makeSettingRow("候选窗布局", "Макет окна / Candidate layout", candidateLayoutPopup))
         stack.addArrangedSubview(makeSettingRow("每页最多候选数", "Кандидатов на страницу / Candidates per page", candidateCountField))
+        stack.addArrangedSubview(makeSettingRow("候选字号", "Размер шрифта / Candidate font size", candidateFontSizeField))
         stack.addArrangedSubview(makeCheckboxRow(candidateDetailsCheckbox, title: "显示候选注释 / 词性 / 来源", subtitle: "Примечания, часть речи, источник / Note, POS, source"))
         stack.addArrangedSubview(makeCheckboxRow(candidateDebugCheckbox, title: "显示候选来源与排序解释", subtitle: "Источник и ранжирование / Source and ranking explanation"))
         stack.addArrangedSubview(makeCheckboxRow(candidateAnimationsCheckbox, title: "启用候选窗动画与轻提示", subtitle: "Анимация и подсказки / Candidate animations and toast"))
@@ -332,7 +364,11 @@ final class PreferencesWindowController: NSWindowController {
             subtitle: "Пользовательский словарь / Custom dictionary\n每行一个词，可附频率，例如：`привет 520`",
             textView: customDictionaryView,
             primaryActionTitle: "保存自定义词库 / Save / Сохранить",
-            primaryAction: #selector(savePreferences)
+            primaryAction: #selector(savePreferences),
+            secondaryActions: [
+                ("导入 / Import", #selector(importCustomDictionary)),
+                ("导出 / Export", #selector(exportCustomDictionary))
+            ]
         )
 
         let learnedSection = makeEditorCard(
@@ -370,7 +406,7 @@ final class PreferencesWindowController: NSWindowController {
         return row
     }
 
-    private func makeEditorCard(title: String, subtitle: String, textView: NSTextView, primaryActionTitle: String, primaryAction: Selector) -> NSView {
+    private func makeEditorCard(title: String, subtitle: String, textView: NSTextView, primaryActionTitle: String, primaryAction: Selector, secondaryActions: [(String, Selector)] = []) -> NSView {
         let titleField = NSTextField(labelWithString: title)
         titleField.font = .systemFont(ofSize: 16, weight: .semibold)
 
@@ -394,7 +430,15 @@ final class PreferencesWindowController: NSWindowController {
         ])
 
         let actionButton = makeProminentButton(title: primaryActionTitle, action: primaryAction)
-        let stack = NSStackView(views: [titleField, subtitleField, scrollView, actionButton])
+        let actionRow = NSStackView(views: [actionButton] + secondaryActions.map { title, selector in
+            let button = NSButton(title: title, target: self, action: selector)
+            button.bezelStyle = .rounded
+            button.controlSize = .large
+            return button
+        })
+        actionRow.orientation = .horizontal
+        actionRow.spacing = 10
+        let stack = NSStackView(views: [titleField, subtitleField, scrollView, actionRow])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 12
@@ -407,6 +451,10 @@ final class PreferencesWindowController: NSWindowController {
         reloadButton.bezelStyle = .rounded
         reloadButton.controlSize = .large
 
+        let updateButton = NSButton(title: "检查更新 / Releases", target: self, action: #selector(openReleasesPage))
+        updateButton.bezelStyle = .rounded
+        updateButton.controlSize = .large
+
         let hint = NSTextField(labelWithString: "改动会立即同步到候选窗与输入行为。\nИзменения сразу применяются к окну кандидатов и логике ввода.\nChanges apply immediately to the candidate window and input behavior.")
         hint.font = .systemFont(ofSize: 12, weight: .regular)
         hint.textColor = .secondaryLabelColor
@@ -415,7 +463,7 @@ final class PreferencesWindowController: NSWindowController {
         let left = NSStackView(views: [hint])
         left.orientation = .vertical
 
-        let right = NSStackView(views: [reloadButton, saveButton])
+        let right = NSStackView(views: [updateButton, reloadButton, saveButton])
         right.orientation = .horizontal
         right.spacing = 10
 
@@ -565,6 +613,8 @@ final class PreferencesWindowController: NSWindowController {
         correctionCheckbox.state = preferences.enableAutoCorrection ? .on : .off
         capsLockPopup.selectItem(at: InputPreferences.CapsLockBehavior.allCases.firstIndex(of: preferences.capsLockBehavior) ?? 0)
         preeditStylePopup.selectItem(at: InputPreferences.PreeditStyle.allCases.firstIndex(of: preferences.preeditStyle) ?? 0)
+        rankingPopup.selectItem(at: InputPreferences.CandidateRankingPreference.allCases.firstIndex(of: preferences.candidateRankingPreference) ?? 0)
+        candidateLayoutPopup.selectItem(at: InputPreferences.CandidateLayout.allCases.firstIndex(of: preferences.candidateLayout) ?? 0)
         perAppModeCheckbox.state = preferences.rememberModePerApp ? .on : .off
         temporaryEnglishCheckbox.state = preferences.enableTemporaryEnglishMode ? .on : .off
         persistModeCheckbox.state = preferences.persistInputModeState ? .on : .off
@@ -573,6 +623,7 @@ final class PreferencesWindowController: NSWindowController {
         candidateDebugCheckbox.state = preferences.showCandidateDebugInfo ? .on : .off
         candidateAnimationsCheckbox.state = preferences.enableCandidateAnimations ? .on : .off
         candidateCountField.stringValue = "\(preferences.maxCandidateCount)"
+        candidateFontSizeField.stringValue = "\(preferences.candidateFontSize)"
         customDictionaryView.string = preferences.customDictionaryText
         learnedPreviewView.string = store.learnedDictionaryPreview()
     }
@@ -582,7 +633,10 @@ final class PreferencesWindowController: NSWindowController {
         let theme = ZnakThemePreset.allCases[safe: themePopup.indexOfSelectedItem] ?? .sogou
         let capsLockBehavior = InputPreferences.CapsLockBehavior.allCases[safe: capsLockPopup.indexOfSelectedItem] ?? .passthrough
         let preeditStyle = InputPreferences.PreeditStyle.allCases[safe: preeditStylePopup.indexOfSelectedItem] ?? .underline
+        let ranking = InputPreferences.CandidateRankingPreference.allCases[safe: rankingPopup.indexOfSelectedItem] ?? .commonWords
+        let candidateLayout = InputPreferences.CandidateLayout.allCases[safe: candidateLayoutPopup.indexOfSelectedItem] ?? .horizontal
         let count = Int(candidateCountField.stringValue) ?? InputPreferences.default.maxCandidateCount
+        let fontSize = Int(candidateFontSizeField.stringValue) ?? InputPreferences.default.candidateFontSize
         let preferences = InputPreferences(
             themePreset: theme,
             enableBuiltinDictionary: builtinDictionaryCheckbox.state == .on,
@@ -592,6 +646,9 @@ final class PreferencesWindowController: NSWindowController {
             enableLearning: learningCheckbox.state == .on,
             enableAutoCorrection: correctionCheckbox.state == .on,
             maxCandidateCount: count,
+            candidateRankingPreference: ranking,
+            candidateLayout: candidateLayout,
+            candidateFontSize: fontSize,
             customDictionaryText: customDictionaryView.string,
             capsLockBehavior: capsLockBehavior,
             rememberModePerApp: perAppModeCheckbox.state == .on,
@@ -618,6 +675,177 @@ final class PreferencesWindowController: NSWindowController {
         store.resetLearningData()
         learnedPreviewView.string = store.learnedDictionaryPreview()
     }
+    @objc
+    private func importCustomDictionary() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.plainText, .utf8PlainText]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.beginSheetModal(for: window!) { [weak self] response in
+            guard response == .OK,
+                  let url = panel.url,
+                  let text = try? String(contentsOf: url, encoding: .utf8) else { return }
+            self?.customDictionaryView.string = text
+            self?.savePreferences()
+        }
+    }
+
+    @objc
+    private func exportCustomDictionary() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.plainText]
+        panel.nameFieldStringValue = "ZnakCustomDictionary.txt"
+        panel.beginSheetModal(for: window!) { [weak self] response in
+            guard response == .OK,
+                  let url = panel.url,
+                  let text = self?.customDictionaryView.string else { return }
+            do {
+                try text.write(to: url, atomically: true, encoding: .utf8)
+            } catch {
+                NSLog("[Znak] Failed to export custom dictionary: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    @objc
+    private func openReleasesPage() {
+        var request = URLRequest(url: Self.latestReleaseURL)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("Znak Update Checker", forHTTPHeaderField: "User-Agent")
+
+        URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
+            if let error {
+                DispatchQueue.main.async {
+                    self?.showUpdateMessage(
+                        title: "检查更新失败 / Update Check Failed / Ошибка проверки",
+                        message: "无法读取 GitHub 最新版本：\(error.localizedDescription)\nUnable to read the latest GitHub release.\nНе удалось получить последнюю версию с GitHub."
+                    )
+                }
+                return
+            }
+
+            guard let data,
+                  let release = try? JSONDecoder().decode(GitHubRelease.self, from: data) else {
+                DispatchQueue.main.async {
+                    self?.showUpdateMessage(
+                        title: "检查更新失败 / Update Check Failed / Ошибка проверки",
+                        message: "GitHub 返回的数据无法解析。\nThe GitHub response could not be parsed.\nОтвет GitHub не удалось обработать."
+                    )
+                }
+                return
+            }
+
+            let currentVersion = Self.currentAppVersion
+            let latestVersion = Self.normalizedVersion(release.tagName)
+            guard Self.compareVersions(latestVersion, currentVersion) == .orderedDescending else {
+                DispatchQueue.main.async {
+                    self?.showUpdateMessage(
+                        title: "已是最新版本 / Up to Date / Уже последняя версия",
+                        message: "当前版本：v\(currentVersion)\n最新版本：v\(latestVersion)\n\nYou are already using the latest version.\nВы уже используете последнюю версию."
+                    )
+                }
+                return
+            }
+
+            guard let pkg = release.assets.first(where: { $0.name.lowercased().hasSuffix(".pkg") }) else {
+                DispatchQueue.main.async {
+                    self?.showUpdateMessage(
+                        title: "发现新版本 / Update Available / Доступно обновление",
+                        message: "v\(latestVersion) 已发布，但没有找到 macOS .pkg 安装包。\nA new version is available, but no macOS .pkg asset was found.\nНовая версия доступна, но .pkg установщик не найден."
+                    )
+                }
+                return
+            }
+
+            self?.downloadUpdatePackage(from: pkg.browserDownloadURL, assetName: pkg.name, latestVersion: latestVersion)
+        }.resume()
+    }
+
+    private nonisolated func downloadUpdatePackage(from url: URL, assetName: String, latestVersion: String) {
+        URLSession.shared.downloadTask(with: url) { [weak self] temporaryURL, _, error in
+            if let error {
+                DispatchQueue.main.async {
+                    self?.showUpdateMessage(
+                        title: "下载失败 / Download Failed / Ошибка загрузки",
+                        message: "无法下载 v\(latestVersion)：\(error.localizedDescription)\nUnable to download the update.\nНе удалось загрузить обновление."
+                    )
+                }
+                return
+            }
+
+            guard let temporaryURL,
+                  let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first else {
+                DispatchQueue.main.async {
+                    self?.showUpdateMessage(
+                        title: "下载失败 / Download Failed / Ошибка загрузки",
+                        message: "无法访问下载目录。\nThe Downloads folder is unavailable.\nПапка загрузок недоступна."
+                    )
+                }
+                return
+            }
+
+            let destination = downloads.appendingPathComponent(assetName)
+            do {
+                if FileManager.default.fileExists(atPath: destination.path) {
+                    try FileManager.default.removeItem(at: destination)
+                }
+                try FileManager.default.moveItem(at: temporaryURL, to: destination)
+                DispatchQueue.main.async {
+                    self?.showUpdateMessage(
+                        title: "已下载新版本 / Update Downloaded / Обновление загружено",
+                        message: "已下载 v\(latestVersion)：\n\(destination.path)\n\nThe installer will open now.\nУстановщик сейчас откроется."
+                    )
+                    NSWorkspace.shared.open(destination)
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self?.showUpdateMessage(
+                        title: "下载失败 / Download Failed / Ошибка загрузки",
+                        message: "无法保存安装包：\(error.localizedDescription)\nUnable to save the installer.\nНе удалось сохранить установщик."
+                    )
+                }
+            }
+        }.resume()
+    }
+
+    private func showUpdateMessage(title: String, message: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: "OK")
+        if let window {
+            alert.beginSheetModal(for: window)
+        } else {
+            alert.runModal()
+        }
+    }
+
+    private nonisolated static var currentAppVersion: String {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+        return normalizedVersion(version ?? "0")
+    }
+
+    private nonisolated static func normalizedVersion(_ version: String) -> String {
+        let trimmed = version.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("v") || trimmed.hasPrefix("V") {
+            return String(trimmed.dropFirst())
+        }
+        return trimmed
+    }
+
+    private nonisolated static func compareVersions(_ lhs: String, _ rhs: String) -> ComparisonResult {
+        let lhsParts = lhs.split(separator: ".").map { Int($0.prefix { $0.isNumber }) ?? 0 }
+        let rhsParts = rhs.split(separator: ".").map { Int($0.prefix { $0.isNumber }) ?? 0 }
+        let count = max(lhsParts.count, rhsParts.count)
+        for index in 0..<count {
+            let left = index < lhsParts.count ? lhsParts[index] : 0
+            let right = index < rhsParts.count ? rhsParts[index] : 0
+            if left < right { return .orderedAscending }
+            if left > right { return .orderedDescending }
+        }
+        return .orderedSame
+    }
+
 }
 
 private extension Collection {

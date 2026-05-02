@@ -117,13 +117,17 @@ private struct CandidatePanelConfig {
     let showDetails: Bool
     let showDebugInfo: Bool
     let enableAnimations: Bool
+    let layout: InputPreferences.CandidateLayout
+    let fontSize: CGFloat
 
     static func current() -> CandidatePanelConfig {
         let preferences = PreferencesStore.shared.preferences.sanitized
         return CandidatePanelConfig(
             showDetails: preferences.showCandidateDetails,
             showDebugInfo: preferences.showCandidateDebugInfo,
-            enableAnimations: preferences.enableCandidateAnimations
+            enableAnimations: preferences.enableCandidateAnimations,
+            layout: preferences.candidateLayout,
+            fontSize: CGFloat(preferences.candidateFontSize)
         )
     }
 }
@@ -316,6 +320,11 @@ private final class CandidatePanelRootView: NSView {
     override var isFlipped: Bool { true }
 
     override var fittingSize: NSSize {
+        if config.layout == .vertical {
+            let itemHeight = config.showDetails ? detailedStripHeight : baseStripHeight
+            let debugExtra = config.showDebugInfo ? debugHeight : 0
+            return NSSize(width: 430, height: headerHeight + itemHeight * 5 + debugExtra + 12)
+        }
         let stripHeight = config.showDetails ? detailedStripHeight : baseStripHeight
         let debugExtra = config.showDebugInfo ? debugHeight : 0
         return NSSize(width: fixedPanelWidth, height: headerHeight + stripHeight + debugExtra)
@@ -349,10 +358,11 @@ private final class CandidatePanelRootView: NSView {
     override func layout() {
         super.layout()
         backgroundView.frame = bounds
-        let stripHeight = config.showDetails ? detailedStripHeight : baseStripHeight
-        let debugExtra = config.showDebugInfo ? debugHeight : 0
+        let stripHeight = config.layout == .vertical
+            ? max(0, bounds.height - headerHeight)
+            : (config.showDetails ? detailedStripHeight : baseStripHeight) + (config.showDebugInfo ? debugHeight : 0)
         headerView.frame = NSRect(x: 0, y: 0, width: bounds.width, height: headerHeight)
-        stripView.frame = NSRect(x: 0, y: headerHeight, width: bounds.width, height: stripHeight + debugExtra)
+        stripView.frame = NSRect(x: 0, y: headerHeight, width: bounds.width, height: stripHeight)
         let toastWidth = min(220, bounds.width - 32)
         toastView.frame = NSRect(x: bounds.width - toastWidth - 16, y: 6, width: toastWidth, height: 28)
         layer?.cornerRadius = theme.panelCornerRadius
@@ -552,7 +562,7 @@ private final class CandidateStripView: NSView {
     private let baseHeight: CGFloat = 48
     private let detailedHeight: CGFloat = 100
     private let debugHeight: CGFloat = 18
-    private let titleFont = NSFont.systemFont(ofSize: 19, weight: .semibold)
+    private var titleFont: NSFont { NSFont.systemFont(ofSize: config.fontSize, weight: .semibold) }
     private let indexFont = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium)
     private let metaFont = NSFont.systemFont(ofSize: 11, weight: .medium)
     private let debugFont = NSFont.systemFont(ofSize: 10, weight: .medium)
@@ -732,13 +742,22 @@ private final class CandidateStripView: NSView {
             return
         }
 
-        var x = candidateViewportRect.minX
-        let rowY = 4 as CGFloat
-        for (index, candidate) in candidates.enumerated() {
-            let width = itemWidth(for: candidate)
-            let rect = NSRect(x: x, y: rowY, width: width, height: candidateCardHeight)
-            candidateLayouts.append(CandidateLayoutItem(index: index, rect: rect))
-            x += width + itemSpacing
+        if config.layout == .vertical {
+            var y = candidateViewportRect.minY
+            for (index, candidate) in candidates.enumerated() {
+                let rect = NSRect(x: candidateViewportRect.minX, y: y, width: candidateViewportRect.width, height: candidateCardHeight)
+                candidateLayouts.append(CandidateLayoutItem(index: index, rect: rect))
+                y += candidateCardHeight + 4
+            }
+        } else {
+            var x = candidateViewportRect.minX
+            let rowY = 4 as CGFloat
+            for (index, candidate) in candidates.enumerated() {
+                let width = itemWidth(for: candidate)
+                let rect = NSRect(x: x, y: rowY, width: width, height: candidateCardHeight)
+                candidateLayouts.append(CandidateLayoutItem(index: index, rect: rect))
+                x += width + itemSpacing
+            }
         }
         scrollOffset = min(scrollOffset, maxScrollOffset)
     }
@@ -786,12 +805,12 @@ private final class CandidateStripView: NSView {
     }
 
     private func candidateIndex(at point: NSPoint) -> Int? {
-        let contentPoint = NSPoint(x: point.x + scrollOffset, y: point.y)
+        let contentPoint = config.layout == .vertical ? point : NSPoint(x: point.x + scrollOffset, y: point.y)
         return candidateLayouts.first(where: { $0.rect.contains(contentPoint) })?.index
     }
 
     private var candidateViewportRect: NSRect {
-        NSRect(x: rowHorizontalInset, y: 4, width: bounds.width - rowHorizontalInset * 2, height: candidateCardHeight)
+        NSRect(x: rowHorizontalInset, y: 4, width: bounds.width - rowHorizontalInset * 2, height: config.layout == .vertical ? max(0, bounds.height - 8) : candidateCardHeight)
     }
 
     private var candidateCardHeight: CGFloat {
@@ -799,7 +818,7 @@ private final class CandidateStripView: NSView {
     }
 
     private var maxScrollOffset: CGFloat {
-        guard let last = candidateLayouts.last else { return 0 }
+        guard config.layout == .horizontal, let last = candidateLayouts.last else { return 0 }
         return max(0, last.rect.maxX - candidateViewportRect.maxX)
     }
 
