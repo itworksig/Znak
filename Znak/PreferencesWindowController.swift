@@ -61,7 +61,9 @@ final class PreferencesWindowController: NSWindowController {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.learnedPreviewView.string = self?.store.learnedDictionaryPreview() ?? ""
+            Task { @MainActor [weak self] in
+                self?.learnedPreviewView.string = self?.store.learnedDictionaryPreview() ?? ""
+            }
         }
     }
 

@@ -6,9 +6,11 @@ guard let server = IMKServer(name: connectionName, bundleIdentifier: Bundle.main
     fatalError("Unable to start Znak input method server.")
 }
 
-let app = NSApplication.shared
-let delegate = AppDelegate(server: server)
+MainActor.assumeIsolated {
+    let app = NSApplication.shared
+    let delegate = AppDelegate(server: server)
 
-app.setActivationPolicy(.accessory)
-app.delegate = delegate
-app.run()
+    app.setActivationPolicy(.accessory)
+    app.delegate = delegate
+    app.run()
+}

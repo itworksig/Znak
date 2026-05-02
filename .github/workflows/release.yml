@@ -104,7 +104,7 @@ jobs:
           echo "notes_path=${NOTES}" >> "$GITHUB_OUTPUT"
           cat "$NOTES"
 
-      - name: Select Xcode with Swift 6
+      - name: Select Xcode
         if: steps.tag_check.outputs.exists == 'false'
         shell: bash
         run: |
@@ -117,10 +117,6 @@ jobs:
           done
           xcodebuild -version
           swiftc -version
-          if ! swiftc -version | grep -q 'Swift version 6'; then
-            echo 'Release builds require Xcode with Swift 6 support.' >&2
-            exit 1
-          fi
 
       - name: Build universal macOS app
         if: steps.tag_check.outputs.exists == 'false'
@@ -140,6 +136,7 @@ jobs:
             CODE_SIGN_STYLE=Manual \
             MARKETING_VERSION='${{ steps.ver.outputs.version }}' \
             CURRENT_PROJECT_VERSION='${{ steps.ver.outputs.build_number }}' \
+            SWIFT_VERSION='5.0' \
             clean build
 
           APP="$DERIVED_DATA/Build/Products/Release/Znak.app"

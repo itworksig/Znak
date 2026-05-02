@@ -22,14 +22,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.refreshStatusItem()
+            Task { @MainActor [weak self] in
+                self?.refreshStatusItem()
+            }
         }
         settingsObserver = NotificationCenter.default.addObserver(
             forName: .znakOpenSettingsRequested,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.openSettings()
+            Task { @MainActor [weak self] in
+                self?.openSettings()
+            }
         }
         refreshStatusItem()
     }
