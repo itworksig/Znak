@@ -76,7 +76,7 @@ struct InputPreferences: Codable, Equatable {
         capsLockBehavior: .passthrough,
         rememberModePerApp: true,
         enableTemporaryEnglishMode: true,
-        persistInputModeState: true,
+        persistInputModeState: false,
         showShiftModeToast: true,
         preeditStyle: .underline,
         showCandidateDetails: false,
